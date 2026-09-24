@@ -12,13 +12,14 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
+    "design:lint": "designmd lint docs/DESIGN.md",
     "test": "pnpm test:unit",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report playwright-report/html",
-    "check": "pnpm typecheck && pnpm lint && pnpm format:check",
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm design:lint",
     "validate": "pnpm check && pnpm test:unit && pnpm build",
     "validate:ci": "pnpm validate && pnpm test:e2e"
   },
@@ -33,6 +34,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@google/design.md": "^0.4.0",
     "@playwright/test": "^1.63.0",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
