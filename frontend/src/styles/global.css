@@ -85,9 +85,16 @@
   }
   .result-area {
     min-height: 3.85rem;
+    padding-block: 0.625rem;
     overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .result-area::-webkit-scrollbar {
+    display: none;
   }
   .result-number {
+    margin: 0;
     width: max-content;
     min-width: 100%;
     text-align: right;
