@@ -1,0 +1,9 @@
+### VS Code ###
+.vscode/
+
+#### Environment Variables ###
+.env
+.envrc
+
+#### Build Output ###
+bin/

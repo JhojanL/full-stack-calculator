@@ -1,0 +1,26 @@
+# lefthook.yml
+
+pre-commit:
+  # Run auto-fixes sequentially so ESLint receives Prettier's formatted output.
+  piped: true
+
+  commands:
+    prettier:
+      root: frontend/
+      glob: "*.{js,jsx,mjs,cjs,ts,tsx,mts,cts,json,jsonc,css,md,mdx,yml,yaml}"
+      run: pnpm exec prettier --write {staged_files}
+      priority: 1
+      stage_fixed: true
+
+    eslint:
+      root: frontend/
+      glob: "*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}"
+      run: pnpm exec eslint --fix {staged_files}
+      priority: 2
+      stage_fixed: true
+
+pre-push:
+  commands:
+    frontend:
+      root: frontend/
+      run: pnpm validate

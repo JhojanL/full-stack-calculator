@@ -1,0 +1,280 @@
+openapi: 3.1.2
+info:
+  title: Calculator API
+  version: 1.0.0
+  description: |
+    Design-first contract derived from docs/prd.md and
+    docs/calculator-behavior.md. Evaluate complete expressions without storing
+    state. All seven calculator operations are available in one expression.
+
+    Contract choices where the source documents do not specify transport details:
+    POST /calculate, JSON envelopes, decimal-string results, the lexical grammar
+    below, and the error codes/status mapping. ASCII operator aliases are accepted
+    alongside the documented mathematical symbols. Unary plus, repeated unary
+    minus, nested unparenthesized roots, and consecutive percentages are excluded
+    by the grammar; use parentheses to express repeated operations.
+
+    Numeric-range assumption: the magnitude of every numeric literal and evaluated
+    intermediate/final value must be at most 2^1024 - 2^971 (the largest finite
+    binary64 value). Exceeding it is NUMERIC_OUT_OF_RANGE. This is a range bound,
+    not a requirement to use binary64 arithmetic. Do not round intermediate values
+    to three decimals or silently underflow a nonzero intermediate value to zero.
+    Retain sufficient precision to correctly round the final mathematical result.
+    The source documents leave numerical precision/range choices to implementation
+    documentation; this range is an explicit contract assumption.
+paths:
+  /calculate:
+    post:
+      operationId: calculateExpression
+      summary: Evaluate a complete calculator expression
+      description: |
+        Independently parse, validate, and evaluate the entire expression.
+        Addition, subtraction, multiplication, division, and exponentiation are
+        binary. Negation and square root are prefix unary operations; percentage
+        is postfix unary and always divides its operand by 100.
+
+        Parentheses control grouping. Percentage binds before powers; powers bind
+        before leading minus and multiplication/division, which bind before
+        addition/subtraction. Powers associate right to left; the other binary
+        operators associate left to right within their precedence level.
+        Negative exponents are valid: -2^2 = -4, (-2)^2 = 4, 2^-2 = 0.25.
+
+        Square root consumes the next number or parenthesized expression, returns
+        its nonnegative root, and can itself be followed by percentage.
+        Thus √9 + 5 = 8, √(9 + 5) = 3.742, and √9% = 0.03.
+        Percentage applies to the preceding number, group, or square-root value:
+        200 × 10% = 20; 200 + 10% = 200.1; 200 × (1 + 10%) = 220.
+
+        Reject division by zero (including an evaluated zero denominator), square
+        roots of negative values, 0^0, zero to a negative power, and negative bases
+        with non-whole-number exponents. Test domains on evaluated, unrounded
+        operands; an exponent is whole if its mathematical value is an integer.
+
+        Round only the final result to at most three decimal places, nearest with
+        halfway values away from zero. Return ordinary decimal notation without
+        redundant trailing fractional zeros or negative zero. For example,
+        1.2345 = 1.235, -1.2345 = -1.235, and -0.0004 = 0.
+
+        Each call is independent. To continue from an earlier result, include the
+        returned rounded string in the next expression, parenthesizing a negative
+        value. For example, after 1 / 3 returns "0.333", submit "0.333 * 3" to
+        obtain "0.999". No previous expression or unrounded result is retained.
+
+        Return one error. Check media type, request shape, empty expression,
+        unsupported syntax/invalid literals, parentheses, then grammar before
+        evaluation. If evaluation encounters multiple errors, return the first
+        in a left-child-before-right-child traversal of the parsed expression.
+        Network failures/timeouts may produce no API response and are not
+        calculation-domain errors.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CalculationRequest'
+            examples:
+              precedence:
+                value: {expression: '2 + 3 × 4'}
+              grouping:
+                value: {expression: '(2 + 3) × 4'}
+              power:
+                value: {expression: '2^3^2'}
+              squareRoot:
+                value: {expression: '√(9 + 5)'}
+              percentage:
+                value: {expression: '200 + 10%'}
+      responses:
+        '200':
+          description: Expression evaluated successfully; result rounded once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalculationResponse'
+              examples:
+                precedence:
+                  value: {result: '14'}
+                grouping:
+                  value: {result: '20'}
+                power:
+                  value: {result: '512'}
+                squareRoot:
+                  value: {result: '3.742'}
+                percentage:
+                  value: {result: '200.1'}
+                negative:
+                  value: {result: '-0.667'}
+        '400':
+          description: |
+            INVALID_REQUEST: absent body, malformed JSON (including bare NaN or
+            Infinity), duplicate JSON member names, a non-object body, missing
+            expression, non-string/null expression, or unknown object properties.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: {code: INVALID_REQUEST, message: 'Request must be a JSON object containing only a string expression.'}
+        '415':
+          description: |
+            UNSUPPORTED_MEDIA_TYPE: missing Content-Type or a media type other than
+            application/json. application/json with a UTF-8 charset is accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: {code: UNSUPPORTED_MEDIA_TYPE, message: 'Content-Type must be application/json.'}
+        '422':
+          description: |
+            Valid request envelope, but expression validation or evaluation failed.
+            Codes: EMPTY_EXPRESSION, INVALID_EXPRESSION, INVALID_OPERAND,
+            UNMATCHED_PARENTHESES, UNSUPPORTED_OPERATION, DIVISION_BY_ZERO,
+            NEGATIVE_SQUARE_ROOT, UNSUPPORTED_POWER, NUMERIC_OUT_OF_RANGE.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                divisionByZero:
+                  value:
+                    error: {code: DIVISION_BY_ZERO, message: 'Cannot divide by zero.'}
+                negativeRoot:
+                  value:
+                    error: {code: NEGATIVE_SQUARE_ROOT, message: 'Square root requires a nonnegative value.'}
+                invalidOperand:
+                  value:
+                    error: {code: INVALID_OPERAND, message: 'Check the expression.'}
+                unsupportedPower:
+                  value:
+                    error: {code: UNSUPPORTED_POWER, message: 'This power cannot be calculated.'}
+        '500':
+          description: INTERNAL_ERROR for an unexpected service failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: {code: INTERNAL_ERROR, message: 'Could not calculate. Try again.'}
+components:
+  schemas:
+    CalculationRequest:
+      type: object
+      additionalProperties: false
+      required: [expression]
+      properties:
+        expression:
+          $ref: '#/components/schemas/Expression'
+    Expression:
+      type: string
+      description: |
+        Complete expression, encoded as a JSON string. Syntax/domain validity is
+        checked by the evaluator; empty or invalid strings receive 422, not 400.
+        No operation selector or separate operand fields are accepted.
+
+        Token aliases: minus is ASCII '-' or U+2212 '−'; multiplication is '*'
+        or U+00D7 '×'; division is '/' or U+00F7 '÷'. Square root is U+221A '√'.
+        All other tokens are ASCII. Space, tab, CR, and LF are allowed between
+        tokens and at boundaries, never within a number. Do not merge numbers
+        separated by whitespace. No implicit multiplication or missing operands
+        are inserted. Input and results never use scientific notation.
+
+        Grammar after mapping operator aliases (EBNF, quoted strings are tokens,
+        brackets mean optional and braces mean zero or more repetitions):
+
+          expression = sum ;
+          sum        = product, { ("+" | "-"), product } ;
+          product    = unary, { ("*" | "/"), unary } ;
+          unary      = ["-"], power ;
+          power      = percent, ["^", unary] ;
+          percent    = primary, ["%"] ;
+          primary    = number | "(", expression, ")" | "√", radicand ;
+          radicand   = ["-"], number | "(", expression, ")" ;
+          number     = digit, {digit}, [".", {digit}] ;
+          digit      = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+
+        Require complete token consumption. Leading zeros and a trailing decimal
+        point are accepted (e.g. 01. and 0.); a leading decimal point is not (use
+        0.5). The sign is an operator, not part of a number token. Invalid numeric
+        forms such as .5, 1..2, or 1e3 produce INVALID_OPERAND. NaN and Infinity
+        (with either sign) produce NUMERIC_OUT_OF_RANGE. Other unrecognized
+        symbols, identifiers, functions, or operators (e.g. sin(1), 2 ** 3, 3!)
+        produce UNSUPPORTED_OPERATION. Recognized tokens in invalid positions
+        produce INVALID_EXPRESSION (e.g. 2 +, 2(3), 2 3, or 10%%).
+      examples:
+        - '5 − 8'
+        - '−2 ÷ 3'
+        - '√2'
+        - '200 × 10%'
+    CalculationResponse:
+      type: object
+      additionalProperties: false
+      required: [result]
+      properties:
+        result:
+          $ref: '#/components/schemas/DecimalResult'
+    DecimalResult:
+      type: string
+      description: |
+        Final rounded decimal value, serialized as a string to preserve ordinary
+        decimal notation across clients. No exponent, plus sign, leading zeros,
+        trailing fractional zeros, or negative zero. At most three decimal places.
+      pattern: '^(?:0|-?[1-9][0-9]*|-?(?:0|[1-9][0-9]*)\.[0-9]{0,2}[1-9])$'
+      examples: ['0', '2', '2.5', '2.125', '-0.667']
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          $ref: '#/components/schemas/CalculationError'
+    CalculationError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        message:
+          type: string
+          minLength: 1
+          description: |
+            Required English message for the corresponding code:
+            INVALID_REQUEST — Request must be a JSON object containing only a string expression.
+            UNSUPPORTED_MEDIA_TYPE — Content-Type must be application/json.
+            EMPTY_EXPRESSION — Enter a calculation.
+            INVALID_EXPRESSION, INVALID_OPERAND, UNSUPPORTED_OPERATION — Check the expression.
+            UNMATCHED_PARENTHESES — Check the parentheses.
+            DIVISION_BY_ZERO — Cannot divide by zero.
+            NEGATIVE_SQUARE_ROOT — Square root requires a nonnegative value.
+            UNSUPPORTED_POWER — This power cannot be calculated.
+            NUMERIC_OUT_OF_RANGE — The result is outside the supported range.
+            INTERNAL_ERROR — Could not calculate. Try again.
+    ErrorCode:
+      type: string
+      description: |
+        Stable machine-readable code. HTTP 400/415/500 codes are described by the
+        corresponding responses. HTTP 422 codes have these meanings:
+
+        EMPTY_EXPRESSION: no tokens after discarding permitted whitespace.
+        INVALID_EXPRESSION: missing value, misplaced operator, or other grammar failure.
+        INVALID_OPERAND: malformed numeric literal or scientific notation.
+        UNMATCHED_PARENTHESES: missing or misplaced opening/closing parenthesis.
+        UNSUPPORTED_OPERATION: unsupported token, function, or operator.
+        DIVISION_BY_ZERO: denominator evaluates to zero before rounding.
+        NEGATIVE_SQUARE_ROOT: radicand evaluates to a negative value.
+        UNSUPPORTED_POWER: 0^0, zero to a negative exponent, or a negative base
+        to a non-whole-number exponent.
+        NUMERIC_OUT_OF_RANGE: nonfinite input, numeric overflow, or nonfinite result.
+      enum:
+        - INVALID_REQUEST
+        - UNSUPPORTED_MEDIA_TYPE
+        - EMPTY_EXPRESSION
+        - INVALID_EXPRESSION
+        - INVALID_OPERAND
+        - UNMATCHED_PARENTHESES
+        - UNSUPPORTED_OPERATION
+        - DIVISION_BY_ZERO
+        - NEGATIVE_SQUARE_ROOT
+        - UNSUPPORTED_POWER
+        - NUMERIC_OUT_OF_RANGE
+        - INTERNAL_ERROR

@@ -1,0 +1,25 @@
+# Environment files
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+
+# Go
+bin/
+*.test
+coverage.out
+
+# Tooling / local configuration
+lefthook-local.yml
+
+# Agent/runtime files
+.agents/
+.playwright-cli/

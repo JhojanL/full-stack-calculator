@@ -1,0 +1,22 @@
+# Dependencies
+node_modules
+
+# Agent/tooling files
+.agents/skills/
+.playwright-cli
+
+# Build output
+dist
+
+# Test output
+coverage
+test-results/
+playwright-report/
+blob-report/
+
+# Playwright runtime data
+playwright/.cache/
+playwright/.auth/
+
+# Local configuration
+lefthook-local.yml
