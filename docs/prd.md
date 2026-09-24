@@ -40,7 +40,7 @@ Accounts, a database, and persistent calculation history are outside the initial
 - Keep arithmetic logic separate from HTTP handling and presentation.
 - Write clean, readable, idiomatic code with unit tests covering key behavior in both layers.
 - Generate frontend and backend coverage reports.
-- Preserve precision within each expression and round only the final result, with halfway values rounded away from zero. Continuing from a result uses the displayed, rounded value.
+- Use Go `float64` arithmetic, including `math.Sqrt` and `math.Pow`, throughout each expression. Apply three-place display rounding only to the final result, with scaled halfway values rounded away from zero. Normal floating-point representation errors and underflow are accepted; exact decimal arithmetic is not required. Continuing from a result uses the displayed, rounded value.
 - Document numerical precision and display-rounding assumptions in the README, consistent with `calculator-behavior.md`.
 
 Detailed tooling configuration belongs in the implementation and README.

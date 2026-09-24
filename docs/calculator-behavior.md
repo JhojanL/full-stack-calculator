@@ -47,10 +47,10 @@ Keep the insertion point visible. Buttons insert at that position, allowing a us
 
 Calculate only after `=` is activated. Keep the expression visible and show a positive number, a negative number, or zero in the result area.
 
-- Round the final result to at most **3 decimal places**, using nearest rounding with halfway values away from zero.
+- Round the final result to at most **3 decimal places**, using the float64 display-rounding rule in OpenAPI (nearest, scaled halfway values away from zero).
 - Remove unnecessary trailing zeros: show `2`, `2.5`, or `2.125`.
 - Use ordinary decimal notation for every result. A value that rounds to zero displays `0`, never `-0`.
-- Keep calculation precision throughout an expression; round its final result only.
+- Use Go `float64` arithmetic throughout, with `math.Sqrt` and `math.Pow`. Only the final result is rounded to three decimal places for display. Binary representation errors and underflow to zero can occur; exact decimal arithmetic is not guaranteed. Domain checks use the evaluated `float64` values before display rounding. See OpenAPI for the precise display-rounding rule.
 
 Immediately after a result:
 

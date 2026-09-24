@@ -15,10 +15,11 @@ paths:
         Validate and evaluate a complete expression; return a decimal-string result
         or one error. Each request is independent.
 
-        Check media type, request shape, empty expression, unsupported syntax/invalid
+        Check media type, body size, request shape, empty expression, unsupported syntax/invalid
         literals, parentheses, then grammar before evaluation. For multiple evaluation
         errors, return the first in a left-child-before-right-child traversal.
       requestBody:
+        description: Maximum encoded JSON body size is 65,536 bytes (64 KiB), including whitespace.
         required: true
         content:
           application/json:
@@ -37,7 +38,7 @@ paths:
                 value: {expression: '200 + 10%'}
       responses:
         '200':
-          description: Expression evaluated successfully; result rounded once.
+          description: Expression evaluated using float64; final result rounded for display.
           content:
             application/json:
               schema:
@@ -60,6 +61,14 @@ paths:
             INVALID_REQUEST: absent body, malformed JSON (including bare NaN or
             Infinity), duplicate JSON member names, a non-object body, missing
             expression, non-string/null expression, or unknown object properties.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: {code: INVALID_REQUEST, message: 'Request must be a JSON object containing only a string expression.'}
+        '413':
+          description: INVALID_REQUEST when the JSON request body exceeds 65,536 bytes (64 KiB).
           content:
             application/json:
               schema:
@@ -143,6 +152,12 @@ components:
           number     = digit, {digit}, [".", {digit}] ;
           digit      = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
 
+        Parser nesting is limited to 128 levels. Each parenthesized expression
+        and each descent into a power's right-hand operand adds one level;
+        mixed nesting counts toward the same limit. Exceeding it produces
+        INVALID_EXPRESSION during grammar parsing. Flat operator sequences have
+        no separate token limit; the HTTP body limit bounds total input size.
+
         Require complete token consumption. Leading zeros and a trailing decimal
         point are accepted (e.g. 01. and 0.); a leading decimal point is not (use
         0.5). The sign is an operator, not part of a number token. Invalid numeric
@@ -152,12 +167,16 @@ components:
         produce UNSUPPORTED_OPERATION. Recognized tokens in invalid positions
         produce INVALID_EXPRESSION (e.g. 2 +, 2(3), 2 3, or 10%%).
 
-        The magnitude of every literal and intermediate/final value must be at most
-        2^1024 - 2^971; exceeding it produces NUMERIC_OUT_OF_RANGE. This is a range
-        bound, not a requirement to use binary64 arithmetic. Preserve nonzero
-        intermediates without silent underflow and enough precision to correctly
-        round the final mathematical result. Check domains on evaluated, unrounded
-        operands; an exponent is whole if its mathematical value is an integer.
+        Literals and all operations use Go float64 (IEEE 754 binary64), including
+        math.Sqrt and math.Pow. Reject literals that parse outside the finite
+        float64 range and any NaN or infinity produced during evaluation with
+        NUMERIC_OUT_OF_RANGE. The largest finite magnitude is 2^1024 - 2^971.
+        Decimal conversion and each operation incur normal binary floating-point
+        rounding; very small literals or results may underflow to zero. Exact
+        decimal arithmetic, preservation of nonzero intermediates, and correctly
+        rounded mathematical results are not guaranteed. Check domains on the
+        evaluated float64 operands before display rounding. An exponent is whole
+        when math.Trunc(exponent) equals exponent in float64.
       examples:
         - '5 − 8'
         - '−2 ÷ 3'
@@ -173,9 +192,14 @@ components:
     DecimalResult:
       type: string
       description: |
-        Decimal string, rounded only once at the final result to at most three
-        decimal places, nearest with halfway values away from zero. No exponent,
-        plus sign, leading zeros, trailing fractional zeros, or negative zero.
+        Decimal string with at most three decimal places. For final float64 values
+        of magnitude below 2^52, display rounding uses math.Round(value * 1000) /
+        1000 (nearest, scaled halfway values away from zero), followed by fixed
+        three-place decimal formatting. Values of magnitude at least 2^52 already
+        have no fractional bits and are formatted without scaling. Normal binary
+        representation and scaling errors apply, including near decimal ties.
+        No exponent, plus sign, leading zeros, trailing fractional zeros, or
+        negative zero. No intermediate value is rounded to three decimal places.
       pattern: '^(?:0|-?[1-9][0-9]*|-?(?:0|[1-9][0-9]*)\.[0-9]{0,2}[1-9])$'
       examples: ['0', '2', '2.5', '2.125', '-0.667']
     ErrorResponse:
@@ -210,18 +234,18 @@ components:
     ErrorCode:
       type: string
       description: |
-        Stable machine-readable code. HTTP 400/415/500 codes are described by the
+        Stable machine-readable code. HTTP 400/413/415/500 codes are described by the
         corresponding responses. HTTP 422 codes have these meanings:
 
         EMPTY_EXPRESSION: no tokens after discarding permitted whitespace.
-        INVALID_EXPRESSION: missing value, misplaced operator, or other grammar failure.
+        INVALID_EXPRESSION: missing value, misplaced operator, nesting beyond 128 levels, or other grammar failure.
         INVALID_OPERAND: malformed numeric literal or scientific notation.
         UNMATCHED_PARENTHESES: missing or misplaced opening/closing parenthesis.
         UNSUPPORTED_OPERATION: unsupported token, function, or operator.
         DIVISION_BY_ZERO: denominator evaluates to zero before rounding.
         NEGATIVE_SQUARE_ROOT: radicand evaluates to a negative value.
         UNSUPPORTED_POWER: 0^0, zero to a negative exponent, or a negative base
-        to a non-whole-number exponent.
+        to an exponent that is not an integer in float64.
         NUMERIC_OUT_OF_RANGE: nonfinite input, numeric overflow, or nonfinite result.
       enum:
         - INVALID_REQUEST

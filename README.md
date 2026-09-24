@@ -2,7 +2,7 @@
 
 An expression calculator being built with React, TypeScript, Vite, and a stateless Go REST API. The planned keypad supports addition, subtraction, multiplication, division, exponentiation, square root, and percentage, with parentheses and operator precedence.
 
-**Status:** initial scaffold. Dependencies and development tooling are configured, but the frontend still shows the Vite starter screen and the calculation API is not implemented. Backend package commands currently fail because `backend/cmd/api/errors.go` and `healthcheck.go` are empty Go files. See [setup and development](#setup-and-development) to explore the frontend and [the specifications](#project-documents) for intended behavior.
+**Status:** the stateless Go calculator API is implemented and tested. Frontend calculator UI and API integration remain separate work. See [setup and development](#setup-and-development) to run the backend and [the specifications](#project-documents) for the application contract.
 
 ## Project structure
 
@@ -11,7 +11,7 @@ An expression calculator being built with React, TypeScript, Vite, and a statele
 | [frontend/](frontend/)                       | React UI, API client, styles, and frontend tooling                  |
 | [frontend/tests/unit/](frontend/tests/unit/) | Planned Vitest tests; currently a placeholder                       |
 | [frontend/tests/e2e/](frontend/tests/e2e/)   | Playwright configuration's test location; currently example tests   |
-| [backend/](backend/)                         | Go entry point, module, Makefile, and placeholder internal packages |
+| [backend/](backend/)                         | Go HTTP service, expression evaluator, tests, and build commands  |
 | [.github/workflows/](.github/workflows/)     | Placeholder for future GitHub Actions workflows                     |
 | [docs/](docs/)                               | Requirements, API contract, architecture, and development prompts   |
 
@@ -58,15 +58,23 @@ pnpm --dir frontend preview --host 127.0.0.1
 
 ### Backend entry point
 
-The intended development command is:
+Start the HTTP service:
 
 ```bash
 make -C backend run/api
 ```
 
-It currently stops with `expected 'package', found 'EOF'` because `errors.go` and `healthcheck.go` are empty. The existing `main.go` only prints `Hello world!`; even after the placeholders are addressed, HTTP startup and routing still need implementation. No backend address or environment-variable configuration has been defined.
+The API listens on port `4000` by default. Use `go run ./cmd/api -port=8080` from `backend/` to change it. No database, credentials, or environment files are needed. Ctrl+C or SIGTERM initiates a five-second graceful shutdown.
 
-`make -C backend help` lists the available targets. `make -C backend build/api` targets `backend/bin/api` and is subject to the same compilation blocker.
+For direct browser requests from a separate frontend origin, set an explicit allowlist:
+
+```bash
+(cd backend && go run ./cmd/api -cors-trusted-origins='http://localhost:5173')
+```
+
+Origins must include the scheme and optional port, with no path or trailing slash. The default empty allowlist grants no cross-origin access. A shared origin with `/calculate` proxied to Go is also supported; frontend proxy configuration is separate work.
+
+`make -C backend help` lists the available targets. `make -C backend build/api` produces `backend/bin/api`; run that binary with the same flags.
 
 ### Git hooks
 
@@ -104,11 +112,11 @@ pnpm --dir frontend test:e2e
 
 System dependency installation may require administrator privileges. The current example tests visit the Playwright website and require internet access; they do not test this calculator or start Go. Reports are written under `frontend/playwright-report/`; open the HTML report with `pnpm --dir frontend test:e2e:report`.
 
-Backend test, audit, build, and coverage commands are blocked by the empty Go files. No backend tests exist yet. Once implemented, the coverage target writes `backend/coverage/coverage.out` and `backend/coverage/coverage.html`. Race-enabled checks require a C compiler. Staticcheck is managed through Go's tool directive at module version `v0.8.1` and invoked by the audit target; no separate global installation is needed.
+Backend tests cover calculation rules, float64 behavior, strict HTTP envelopes, CORS, panic recovery, configuration, and server lifecycle. The coverage target writes `backend/coverage/coverage.out` and `backend/coverage/coverage.html`. Race-enabled checks require a C compiler. Staticcheck is managed through Go's tool directive at module version `v0.8.1` and invoked by the audit target; no separate global installation is needed.
 
 ## API
 
-The [OpenAPI specification](docs/openapi.yaml) defines `POST /calculate`. This contract is not implemented yet. Requests contain a complete expression; results are decimal strings.
+The [OpenAPI specification](docs/openapi.yaml) defines `POST /calculate`. Requests contain a complete expression; results are decimal strings.
 
 Request body with `Content-Type: application/json`:
 
@@ -116,7 +124,7 @@ Request body with `Content-Type: application/json`:
 { "expression": "2 + 3 × 4" }
 ```
 
-Expected `200` response:
+`200` response:
 
 ```json
 { "result": "14" }
@@ -128,23 +136,24 @@ For `{"expression":"1 / 0"}`, the expected `422` response is:
 { "error": { "code": "DIVISION_BY_ZERO", "message": "Cannot divide by zero." } }
 ```
 
-Once an HTTP server is implemented, set `CALCULATOR_API_URL` to its actual origin and use this example:
+With the backend running on the default port:
 
 ```bash
-curl --request POST "${CALCULATOR_API_URL:?Set this to the running backend origin}/calculate" \
+curl --request POST http://localhost:4000/calculate \
   --header 'Content-Type: application/json' \
   --data '{"expression":"2 + 3 * 4"}'
 ```
 
-`CALCULATOR_API_URL` is a shell variable for this example, not an implemented application setting. OpenAPI specifies `400` for invalid request envelopes, `415` for unsupported/missing media types, `422` for expression or arithmetic errors, and `500` for unexpected service failures.
+OpenAPI specifies `400` for invalid request envelopes, `413 INVALID_REQUEST` for bodies over 64 KiB, `415` for unsupported/missing media types, `422` for expression or arithmetic errors, and `500` for unexpected service failures.
 
 ## Design decisions and assumptions
 
-- React owns keypad editing and presentation; Go independently parses, validates, and calculates every submitted expression. Routing will use `httprouter v1.3.0` alongside `net/http`.
-- Preserve precision within an expression and round only the final result to at most three decimal places, with halfway values rounded away from zero. Return ordinary decimal strings without redundant fractional zeros or negative zero. The frontend displays these strings without converting them to JavaScript numbers.
+- React owns keypad editing and presentation; Go independently parses, validates, and calculates every submitted expression. Routing uses `httprouter v1.3.0` alongside `net/http`.
+- Use Go `float64` arithmetic throughout, including `math.Sqrt` and `math.Pow`. Do not round intermediates to three places. For final magnitudes below `2^52`, apply `math.Round(value * 1000) / 1000` and fixed three-place formatting; larger float64 values have no fractional bits and are formatted without scaling. Remove trailing fractional zeros and negative zero, and never use exponent notation. The frontend should display these strings directly.
 - Continuing from a result uses the displayed rounded value: `1 / 3 → 0.333`, then `× 3 → 0.999`. Each API request is independent.
-- OpenAPI limits literal and intermediate/final magnitudes to `2^1024 - 2^971`, without allowing silent underflow of nonzero intermediates. The numerical implementation is still undecided; a plain `float64` evaluator does not establish the required rounding guarantees.
+- Literal conversion and every operation follow ordinary binary floating-point rounding. Exact decimal arithmetic is not promised: cancellation can lose precision, decimal ties can be affected by representation/scaling, and tiny values may underflow to zero. NaN and infinity are rejected as `NUMERIC_OUT_OF_RANGE`. Domain checks use unrounded float64 operands; integer exponents satisfy `math.Trunc(exponent) == exponent`. For example, `10^-400` yields `0`, and `1/(10^-400)` reports division by zero.
 - The planned interface accepts keypad input only and follows [DESIGN.md](frontend/docs/DESIGN.md), using Tailwind CSS, variable Manrope, and Lucide icons. It targets WCAG 2.2 AA, keyboard button activation, and a 320px minimum viewport width.
+- Parser nesting is limited to 128 levels, counting parentheses and right-hand power operands together. Excessive nesting returns `422 INVALID_EXPRESSION`. No separate token limit is imposed.
 - Accounts, a database, and persistent calculation history are outside scope. Hosting is undecided; Docker packaging is optional.
 
 ## Project documents

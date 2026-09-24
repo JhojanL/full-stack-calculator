@@ -1,6 +1,6 @@
 # Architecture
 
-**Status:** target architecture with an initial scaffold. The frontend currently renders the Vite starter screen, and the Go entry point prints a greeting. The calculator and API described below remain to be implemented.
+**Status:** the Go calculator API is implemented. The frontend and full-stack integration remain separate work; frontend descriptions below describe the target architecture.
 
 ## Scope and sources
 
@@ -29,7 +29,7 @@ Versions below are declared manifest ranges or tool pins, not claims about the l
 | Backend            | Go `1.26.8` in `backend/go.mod` and `mise.toml`; HTTP/JSON through `net/http` and `encoding/json` |
 | Development        | Node `24.19.0`, pnpm `12.5.1`, Lefthook `2.1.14` in `mise.toml`                                   |
 
-Frontend dependencies and their lockfile live in `frontend/`. Go dependencies and tools live in `backend/go.mod` and `backend/go.sum`. Use `github.com/julienschmidt/httprouter` `v1.3.0` for routing alongside `net/http`; routes are not yet implemented. Staticcheck is registered through the Go tool directive as `honnef.co/go/tools/cmd/staticcheck`, with its module pinned to `v0.8.1`, and runs through `go tool staticcheck ./...` from `backend/` as part of `make audit`.
+Frontend dependencies and their lockfile live in `frontend/`. Go dependencies and tools live in `backend/go.mod` and `backend/go.sum`. Use `github.com/julienschmidt/httprouter` `v1.3.0` for routing alongside `net/http`; `POST /calculate` is implemented. Staticcheck is registered through the Go tool directive as `honnef.co/go/tools/cmd/staticcheck`, with its module pinned to `v0.8.1`, and runs through `go tool staticcheck ./...` from `backend/` as part of `make audit`.
 
 Preserve the module identity and use explicit application dependencies. Standard-library imports should follow implementation needs; examples from other projects do not prescribe this service's file layout or require metrics, query parsing, background tasks, or extra helper packages. A database, ORM, authentication framework, and frontend global state library are unnecessary for this scope.
 
@@ -37,7 +37,7 @@ There is currently no root `package.json`, pnpm workspace, or root JavaScript lo
 
 ## Repository boundaries
 
-The directories exist; most calculator-specific directories are placeholders. Their intended responsibilities are:
+The backend packages are implemented; frontend calculator directories remain placeholders. Responsibilities are:
 
 | Path                           | Responsibility                                                                                |
 | ------------------------------ | --------------------------------------------------------------------------------------------- |
@@ -67,13 +67,14 @@ Keep Go tests beside their packages as `_test.go` files. Domain code must not de
 | HTTP status | Meaning                                                                                                                               |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `400`       | `INVALID_REQUEST`: malformed JSON, duplicate member names, non-object body, missing/non-string/null expression, or unknown properties |
+| `413`       | `INVALID_REQUEST`: JSON body exceeds 64 KiB                                                                                           |
 | `415`       | `UNSUPPORTED_MEDIA_TYPE`: missing or unsupported Content-Type; JSON with UTF-8 charset is accepted                                    |
 | `422`       | Expression validation or evaluation failure, including empty expressions and every documented domain error                            |
 | `500`       | `INTERNAL_ERROR`: unexpected service failure with a generic user message                                                              |
 
 Use the exact error codes and English messages from OpenAPI. Decode exactly one object, reject duplicate keys and extra properties, and require complete body consumption. Ordinary struct decoding alone is insufficient to enforce all these constraints.
 
-Preserve validation order: media type, request shape, empty expression, unsupported syntax/invalid literals, parentheses, then grammar. Only then evaluate; when multiple evaluation errors exist, report the first in left-child-before-right-child traversal. Log internal failures without exposing implementation details in responses.
+Preserve validation order: media type, body size, request shape, empty expression, unsupported syntax/invalid literals, parentheses, then grammar. Only then evaluate; when multiple evaluation errors exist, report the first in left-child-before-right-child traversal. Log internal failures without exposing implementation details in responses.
 
 ## Parsing and numerical evaluation
 
@@ -81,13 +82,11 @@ Implement the OpenAPI EBNF with a dedicated lexer/parser, never language-level `
 
 The syntax tree encodes percentage before powers, powers before leading minus, then multiplication/division, then addition/subtraction. Powers associate right to left. Square root consumes its next number or parenthesized expression. These rules must preserve examples such as `2^3^2 → 512`, `-2^2 → -4`, `2^-2 → 0.25`, and `√9% → 0.03`. Percentage always divides by 100, including in `200 + 10% → 200.1`.
 
-Check domains on evaluated, unrounded operands: reject zero denominators, negative square roots, `0^0`, zero to a negative power, and negative bases with non-integer exponents. An exponent's mathematical value determines whether it is an integer.
+Check domains on evaluated, unrounded operands: reject zero denominators, negative square roots, `0^0`, zero to a negative power, and negative bases with non-integer exponents. An exponent is an integer when `math.Trunc(exponent) == exponent` on the evaluated `float64` value.
 
-The contract bounds the magnitude of every literal and intermediate/final value by `2^1024 - 2^971`. This is a magnitude limit, not permission to use binary64 rounding throughout. Preserve nonzero intermediates without silent underflow and retain enough precision to round the final mathematical result correctly.
+The evaluator uses Go `float64` throughout, with `math.Sqrt` and `math.Pow`. Literals that parse outside the finite float64 range and operations producing NaN or infinity return `NUMERIC_OUT_OF_RANGE`. Binary representation errors, cancellation, and underflow to zero follow ordinary float64 behavior. Exact decimal arithmetic and preservation of tiny nonzero intermediates are not guaranteed.
 
-Round once, to at most three decimal places, with halfway values away from zero. Serialize ordinary decimal notation without redundant fractional zeros, exponents, or negative zero: `1.2345 → "1.235"`, `-1.2345 → "-1.235"`, and `-0.0004 → "0"`.
-
-**Open implementation decision:** select and verify a numerical strategy for exact decimal/rational operations plus square roots and fractional powers. A plain `float64` evaluator or an arbitrary fixed precision does not establish these guarantees. Evaluate candidate implementations against tie cases, cancellation, domain checks, and range boundaries before choosing a dependency. Document the resulting precision assumptions in the README without silently weakening OpenAPI.
+Intermediate values are not rounded to three decimal places. Final values below magnitude `2^52` use `math.Round(value * 1000) / 1000`, then fixed three-place formatting and removal of redundant zeros. Larger values have no fractional bits and are formatted without scaling to avoid overflow. Results never use scientific notation or negative zero. Binary scaling errors can affect results near decimal ties. This intentionally simple numerical policy is also specified in OpenAPI and the README.
 
 ## Frontend state and API boundary
 
@@ -128,7 +127,7 @@ Verify observable contracts at the smallest useful boundary. Keep pure dependenc
 
 | Boundary                       | Required evidence                                                                                                                                                                                                   |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Go calculator package          | Table-driven tests for precedence, associativity, all seven operations, aliases, grammar rejection, error ordering, domains, range, underflow preservation, and exact rounded strings                               |
+| Go calculator package          | Table-driven tests for precedence, associativity, all seven operations, aliases, grammar rejection, error ordering, domains, range, float64 underflow, and expected display strings                                 |
 | Go routed HTTP handler         | `net/http/httptest` requests through the real router/middleware; assert status, JSON content type, exact envelopes/codes/messages, strict request decoding, and representative successful evaluations               |
 | Frontend pure state and client | Vitest scenarios for insertion/deletion, decimal rules, post-result transitions, negative-result reuse, validation, schema rejection, retries, timeout, duplicate prevention, and stale success/failure suppression |
 | Rendered UI                    | Playwright checks for keypad-only editing, focus and keyboard activation, visible loading/errors, accessible names/announcements, 320px layout, enlarged text, and long-value scrolling                             |
@@ -140,7 +139,7 @@ Current testing gaps are explicit:
 
 - Vitest selects only `tests/unit/**/*.test.ts` in the Node environment; the unit directory contains no tests. React Testing Library, a DOM environment, and a Vitest coverage provider are not declared. Pure state/client tests fit the current configuration; component tests would require deliberate dependencies and configuration, including `.tsx` selection.
 - Playwright currently starts the Vite development server and runs example tests against the Playwright website. It does not start Go or verify this calculator. Replace those examples and configure both application processes for full-stack acceptance testing.
-- Backend coverage commands exist, but calculator tests and implementation are absent. Add frontend coverage tooling and a reproducible command before claiming both coverage deliverables are available.
+- Backend calculator and HTTP tests generate coverage through `make -C backend test/coverage`. Frontend coverage remains separate work; do not claim both reports are available until its tooling exists.
 
 For implementation changes, run focused tests first, then applicable quality gates. Empty suites, skipped scenarios, and unrelated example tests are not evidence that calculator requirements pass. For documentation-only changes, verify formatting, links, and consistency with the source contracts without adding tests that merely match prose.
 
@@ -151,7 +150,7 @@ These commands exist now; they describe available entry points, not completed ca
 | Command from repository root      | Purpose                                                                |
 | --------------------------------- | ---------------------------------------------------------------------- |
 | `pnpm --dir frontend dev`         | Start Vite                                                             |
-| `make -C backend run/api`         | Run the current Go entry point; it is not yet an HTTP server           |
+| `make -C backend run/api`         | Run the calculator HTTP server on port 4000                            |
 | `pnpm --dir frontend check`       | TypeScript build-mode checks, ESLint, and read-only Prettier check     |
 | `pnpm --dir frontend test:unit`   | Vitest in non-watch mode                                               |
 | `pnpm --dir frontend build`       | TypeScript check and Vite production build                             |
@@ -171,6 +170,6 @@ The intended CI runs on PRs to `main` and pushes to `main`: read-only formatting
 
 Serve static frontend assets and run one Go HTTP service. Prefer a shared public origin with `/calculate` routed to Go. Configure a Vite development proxy for that same path; no proxy exists in the current Vite configuration. If hosting uses separate origins, configure the API base URL and an explicit CORS origin allowlist. Keep asset paths independent of the API base URL.
 
-The Go process owns server timeouts, request cancellation, panic recovery, and graceful shutdown. Parsing and numerical work need bounded resources as well as bounded transport input. Exact body-size, token/depth, and computation limits and their public error mapping remain to be specified in OpenAPI before implementation; do not silently add undocumented rejection behavior. A server socket timeout alone does not bound evaluator CPU work.
+The Go process owns server timeouts, request cancellation, panic recovery, and a five-second graceful shutdown drain. Request bodies are limited to 64 KiB, returning `413 INVALID_REQUEST` when exceeded. Parser nesting is limited to 128 levels, counting parenthesized expressions and recursive right-hand power operands together; exceeding this returns `422 INVALID_EXPRESSION`. There is no separate token or adaptive computation budget. The body limit bounds total input size, and tree evaluation checks request cancellation at each node.
 
-The hosting target and numerical implementation remain open decisions. Docker packaging and continuous deployment are optional. No persistence infrastructure is required.
+The hosting target remains an open decision. Docker packaging and continuous deployment are optional. No persistence infrastructure is required.
