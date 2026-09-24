@@ -3,69 +3,21 @@ info:
   title: Calculator API
   version: 1.0.0
   description: |
-    Design-first contract derived from docs/prd.md and
-    docs/calculator-behavior.md. Evaluate complete expressions without storing
-    state. All seven calculator operations are available in one expression.
-
-    Contract choices where the source documents do not specify transport details:
-    POST /calculate, JSON envelopes, decimal-string results, the lexical grammar
-    below, and the error codes/status mapping. ASCII operator aliases are accepted
-    alongside the documented mathematical symbols. Unary plus, repeated unary
-    minus, nested unparenthesized roots, and consecutive percentages are excluded
-    by the grammar; use parentheses to express repeated operations.
-
-    Numeric-range assumption: the magnitude of every numeric literal and evaluated
-    intermediate/final value must be at most 2^1024 - 2^971 (the largest finite
-    binary64 value). Exceeding it is NUMERIC_OUT_OF_RANGE. This is a range bound,
-    not a requirement to use binary64 arithmetic. Do not round intermediate values
-    to three decimals or silently underflow a nonzero intermediate value to zero.
-    Retain sufficient precision to correctly round the final mathematical result.
-    The source documents leave numerical precision/range choices to implementation
-    documentation; this range is an explicit contract assumption.
+    Stateless expression evaluation. See [Calculator behavior](calculator-behavior.md)
+    for arithmetic rules and result reuse, and [Architecture](architecture.md)
+    for implementation guidance.
 paths:
   /calculate:
     post:
       operationId: calculateExpression
       summary: Evaluate a complete calculator expression
       description: |
-        Independently parse, validate, and evaluate the entire expression.
-        Addition, subtraction, multiplication, division, and exponentiation are
-        binary. Negation and square root are prefix unary operations; percentage
-        is postfix unary and always divides its operand by 100.
+        Validate and evaluate a complete expression; return a decimal-string result
+        or one error. Each request is independent.
 
-        Parentheses control grouping. Percentage binds before powers; powers bind
-        before leading minus and multiplication/division, which bind before
-        addition/subtraction. Powers associate right to left; the other binary
-        operators associate left to right within their precedence level.
-        Negative exponents are valid: -2^2 = -4, (-2)^2 = 4, 2^-2 = 0.25.
-
-        Square root consumes the next number or parenthesized expression, returns
-        its nonnegative root, and can itself be followed by percentage.
-        Thus √9 + 5 = 8, √(9 + 5) = 3.742, and √9% = 0.03.
-        Percentage applies to the preceding number, group, or square-root value:
-        200 × 10% = 20; 200 + 10% = 200.1; 200 × (1 + 10%) = 220.
-
-        Reject division by zero (including an evaluated zero denominator), square
-        roots of negative values, 0^0, zero to a negative power, and negative bases
-        with non-whole-number exponents. Test domains on evaluated, unrounded
-        operands; an exponent is whole if its mathematical value is an integer.
-
-        Round only the final result to at most three decimal places, nearest with
-        halfway values away from zero. Return ordinary decimal notation without
-        redundant trailing fractional zeros or negative zero. For example,
-        1.2345 = 1.235, -1.2345 = -1.235, and -0.0004 = 0.
-
-        Each call is independent. To continue from an earlier result, include the
-        returned rounded string in the next expression, parenthesizing a negative
-        value. For example, after 1 / 3 returns "0.333", submit "0.333 * 3" to
-        obtain "0.999". No previous expression or unrounded result is retained.
-
-        Return one error. Check media type, request shape, empty expression,
-        unsupported syntax/invalid literals, parentheses, then grammar before
-        evaluation. If evaluation encounters multiple errors, return the first
-        in a left-child-before-right-child traversal of the parsed expression.
-        Network failures/timeouts may produce no API response and are not
-        calculation-domain errors.
+        Check media type, request shape, empty expression, unsupported syntax/invalid
+        literals, parentheses, then grammar before evaluation. For multiple evaluation
+        errors, return the first in a left-child-before-right-child traversal.
       requestBody:
         required: true
         content:
@@ -169,7 +121,6 @@ components:
       description: |
         Complete expression, encoded as a JSON string. Syntax/domain validity is
         checked by the evaluator; empty or invalid strings receive 422, not 400.
-        No operation selector or separate operand fields are accepted.
 
         Token aliases: minus is ASCII '-' or U+2212 '−'; multiplication is '*'
         or U+00D7 '×'; division is '/' or U+00F7 '÷'. Square root is U+221A '√'.
@@ -200,6 +151,13 @@ components:
         symbols, identifiers, functions, or operators (e.g. sin(1), 2 ** 3, 3!)
         produce UNSUPPORTED_OPERATION. Recognized tokens in invalid positions
         produce INVALID_EXPRESSION (e.g. 2 +, 2(3), 2 3, or 10%%).
+
+        The magnitude of every literal and intermediate/final value must be at most
+        2^1024 - 2^971; exceeding it produces NUMERIC_OUT_OF_RANGE. This is a range
+        bound, not a requirement to use binary64 arithmetic. Preserve nonzero
+        intermediates without silent underflow and enough precision to correctly
+        round the final mathematical result. Check domains on evaluated, unrounded
+        operands; an exponent is whole if its mathematical value is an integer.
       examples:
         - '5 − 8'
         - '−2 ÷ 3'
@@ -215,9 +173,9 @@ components:
     DecimalResult:
       type: string
       description: |
-        Final rounded decimal value, serialized as a string to preserve ordinary
-        decimal notation across clients. No exponent, plus sign, leading zeros,
-        trailing fractional zeros, or negative zero. At most three decimal places.
+        Decimal string, rounded only once at the final result to at most three
+        decimal places, nearest with halfway values away from zero. No exponent,
+        plus sign, leading zeros, trailing fractional zeros, or negative zero.
       pattern: '^(?:0|-?[1-9][0-9]*|-?(?:0|[1-9][0-9]*)\.[0-9]{0,2}[1-9])$'
       examples: ['0', '2', '2.5', '2.125', '-0.667']
     ErrorResponse:
