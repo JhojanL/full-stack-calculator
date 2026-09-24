@@ -23,3 +23,5 @@ lefthook-local.yml
 # Agent/runtime files
 .agents/
 .playwright-cli/
+.codex/
+AGENTS.md
