@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"github.com/JhojanL/full-stack-calculator/backend/internal/config"
 	"io"
 	"log/slog"
 	"net/http"
@@ -12,7 +13,7 @@ import (
 
 // TestCORS verifies exact origin matching and constrained preflights using t.
 func TestCORS(t *testing.T) {
-	handler := New(nil, []string{"http://localhost:5173"})
+	handler := New(nil, config.Config{TrustedOrigins: []string{"http://localhost:5173"}}, "test")
 	tests := []struct {
 		name, method, path, origin, requestedMethod, requestedHeaders string
 		grant                                                         bool
@@ -106,7 +107,7 @@ func TestCanceledRequest(t *testing.T) {
 	request := httptest.NewRequest("POST", "/calculate", strings.NewReader(`{"expression":"1+2"}`)).WithContext(ctx)
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
-	New(slog.New(slog.NewTextHandler(io.Discard, nil)), nil).ServeHTTP(response, request)
+	New(slog.New(slog.NewTextHandler(io.Discard, nil)), config.Config{}, "test").ServeHTTP(response, request)
 	if response.Code != 500 {
 		t.Fatalf("status = %d, want 500", response.Code)
 	}

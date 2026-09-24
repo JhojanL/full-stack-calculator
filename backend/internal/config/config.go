@@ -5,15 +5,26 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"net/url"
 	"strings"
 )
 
-// Config contains the listener port and explicitly trusted browser origins.
+// Config contains listener, environment, rate-limiting, and browser-origin settings.
 // An empty TrustedOrigins list disables cross-origin grants.
 type Config struct {
 	Port           int
+	Environment    string
+	Limiter        Limiter
 	TrustedOrigins []string
+}
+
+// Limiter configures per-IP token buckets. RPS is the positive refill rate in
+// requests per second, Burst is the positive capacity, and Enabled controls use.
+type Limiter struct {
+	Enabled bool
+	RPS     float64
+	Burst   int
 }
 
 // Parse reads args without process-global flags and writes flag help/errors to output.
@@ -22,6 +33,10 @@ func Parse(args []string, output io.Writer) (Config, error) {
 	flags := flag.NewFlagSet("calculator", flag.ContinueOnError)
 	flags.SetOutput(output)
 	flags.IntVar(&cfg.Port, "port", 4000, "API server port (1-65535)")
+	flags.StringVar(&cfg.Environment, "env", "development", "Environment (development|staging|production)")
+	flags.BoolVar(&cfg.Limiter.Enabled, "limiter-enabled", true, "Enable per-IP calculation rate limiting")
+	flags.Float64Var(&cfg.Limiter.RPS, "limiter-rps", 2, "Rate limiter requests per second")
+	flags.IntVar(&cfg.Limiter.Burst, "limiter-burst", 4, "Rate limiter burst capacity")
 	var origins string
 	flags.StringVar(&origins, "cors-trusted-origins", "", "Trusted CORS origins (space separated)")
 	if err := flags.Parse(args); err != nil {
@@ -32,6 +47,17 @@ func Parse(args []string, output io.Writer) (Config, error) {
 	}
 	if cfg.Port < 1 || cfg.Port > 65535 {
 		return cfg, fmt.Errorf("port must be between 1 and 65535")
+	}
+	switch cfg.Environment {
+	case "development", "staging", "production":
+	default:
+		return cfg, fmt.Errorf("environment must be development, staging, or production")
+	}
+	if cfg.Limiter.RPS <= 0 || math.IsNaN(cfg.Limiter.RPS) || math.IsInf(cfg.Limiter.RPS, 0) {
+		return cfg, fmt.Errorf("limiter-rps must be finite and positive")
+	}
+	if cfg.Limiter.Burst < 1 {
+		return cfg, fmt.Errorf("limiter-burst must be positive")
 	}
 	cfg.TrustedOrigins = strings.Fields(origins)
 	for _, origin := range cfg.TrustedOrigins {

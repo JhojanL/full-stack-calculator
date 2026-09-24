@@ -19,8 +19,27 @@ pre-commit:
       priority: 2
       stage_fixed: true
 
+    gofmt:
+      root: backend/
+      glob: "*.go"
+      run: gofmt -w {staged_files}
+      priority: 3
+      stage_fixed: true
+
+    backend:
+      root: backend/
+      glob:
+        - "*.{go,mod,sum}"
+        - "backend/Makefile"
+      run: make test
+      priority: 4
+
 pre-push:
   commands:
     frontend:
       root: frontend/
       run: pnpm validate
+
+    backend:
+      root: backend/
+      run: make audit build/api

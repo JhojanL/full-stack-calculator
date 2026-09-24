@@ -15,16 +15,21 @@ help:
 # DEVELOPMENT
 # ==================================================================================== #
 
-## run/api: run the API application
+## run/api: run the API application with optional ARGS
 .PHONY: run/api
 run/api:
-	go run ./cmd/api
+	go run ./cmd/api $(ARGS)
 
 ## tidy: tidy and verify dependencies, and format Go files
 .PHONY: tidy
 tidy:
 	go mod tidy
 	go mod verify
+	go mod vendor
+
+## fmt: format Go source files
+.PHONY: fmt
+fmt:
 	go fmt ./...
 
 # ==================================================================================== #
@@ -44,21 +49,23 @@ test/coverage:
 	go tool cover -func=./coverage/coverage.out
 	go tool cover -html=./coverage/coverage.out -o=./coverage/coverage.html
 
-## audit: check dependencies, vet code, and run tests with race detection
+## audit: check dependencies, vet code, gosec, govulncheck, and run tests with race detection
 .PHONY: audit
 audit:
 	go mod tidy -diff
 	go mod verify
 	go vet ./...
 	go tool staticcheck ./...
+	gosec ./...
+	govulncheck ./...
 	go test -race -vet=off ./...
 
 # ==================================================================================== #
 # BUILD
 # ==================================================================================== #
 
-## build/api: build the API binary for the current platform
+## build/api: build the cmd/api application
 .PHONY: build/api
 build/api:
-	mkdir -p ./bin
-	go build -o=./bin/api ./cmd/api
+	go build -ldflags='-s' -o=./bin/api ./cmd/api
+	GOOS=linux GOARCH=amd64 go build -ldflags='-s' -o=./bin/linux_amd64/api ./cmd/api

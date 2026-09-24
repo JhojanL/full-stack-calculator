@@ -28,6 +28,8 @@ func (app *api) errorResponse(w http.ResponseWriter, r *http.Request, status int
 		message = "This power cannot be calculated."
 	case "NUMERIC_OUT_OF_RANGE":
 		message = "The result is outside the supported range."
+	case "RATE_LIMIT_EXCEEDED":
+		message = "Rate limit exceeded. Try again shortly."
 	case "INTERNAL_ERROR":
 		message = "Could not calculate. Try again."
 	}

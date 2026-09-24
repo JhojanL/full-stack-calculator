@@ -9,6 +9,7 @@ One repository contains a React SPA and one stateless Go REST service. React own
 - [PRD](prd.md): scope and acceptance criteria, including all seven operations.
 - [Calculator behavior](calculator-behavior.md): keypad, editing transitions, arithmetic rules, messages, and accessibility.
 - [OpenAPI contract](openapi.yaml): authoritative request/response schemas, grammar, status codes, error ordering, and numerical assumptions.
+- [Backend Makefile](../backend/Makefile): backend development, quality, and build commands.
 - [Frontend manifest](../frontend/package.json): declared dependencies and available frontend commands.
 - [Design specification](../frontend/docs/DESIGN.md): layout, tokens, typography, and icons.
 
@@ -29,7 +30,7 @@ Versions below are declared manifest ranges or tool pins, not claims about the l
 | Backend            | Go `1.26.8` in `backend/go.mod` and `mise.toml`; HTTP/JSON through `net/http` and `encoding/json` |
 | Development        | Node `24.19.0`, pnpm `12.5.1`, Lefthook `2.1.14` in `mise.toml`                                   |
 
-Frontend dependencies and their lockfile live in `frontend/`. Go dependencies and tools live in `backend/go.mod` and `backend/go.sum`. Use `github.com/julienschmidt/httprouter` `v1.3.0` for routing alongside `net/http`; `POST /calculate` is implemented. Staticcheck is registered through the Go tool directive as `honnef.co/go/tools/cmd/staticcheck`, with its module pinned to `v0.8.1`, and runs through `go tool staticcheck ./...` from `backend/` as part of `make audit`.
+Frontend dependencies and their lockfile live in `frontend/`. Go dependencies and tools live in `backend/go.mod` and `backend/go.sum`. Use `github.com/julienschmidt/httprouter` `v1.3.0` for routing alongside `net/http`; `POST /calculate` is implemented. Staticcheck is registered through the Go tool directive as `honnef.co/go/tools/cmd/staticcheck`, with its module pinned to `v0.8.1`, and runs through `go tool staticcheck ./...` from `backend/` as part of `make audit`. Audit also invokes standalone `gosec` and `govulncheck` executables from `PATH`; their installation and versions are not managed by the module or mise configuration.
 
 Preserve the module identity and use explicit application dependencies. Standard-library imports should follow implementation needs; examples from other projects do not prescribe this service's file layout or require metrics, query parsing, background tasks, or extra helper packages. A database, ORM, authentication framework, and frontend global state library are unnecessary for this scope.
 
@@ -74,7 +75,7 @@ Keep Go tests beside their packages as `_test.go` files. Domain code must not de
 
 Use the exact error codes and English messages from OpenAPI. Decode exactly one object, reject duplicate keys and extra properties, and require complete body consumption. Ordinary struct decoding alone is insufficient to enforce all these constraints.
 
-Preserve validation order: media type, body size, request shape, empty expression, unsupported syntax/invalid literals, parentheses, then grammar. Only then evaluate; when multiple evaluation errors exist, report the first in left-child-before-right-child traversal. Log internal failures without exposing implementation details in responses.
+For `POST /calculate`, apply per-IP rate limiting first. Preserve validation order after admission: media type, body size, request shape, empty expression, unsupported syntax/invalid literals, parentheses, then grammar. Only then evaluate; when multiple evaluation errors exist, report the first in left-child-before-right-child traversal. Log internal failures without exposing implementation details in responses.
 
 ## Parsing and numerical evaluation
 
@@ -137,7 +138,7 @@ Go test applications must own their router and dependencies rather than mutate p
 
 Current testing gaps are explicit:
 
-- Vitest selects only `tests/unit/**/*.test.ts` in the Node environment; the unit directory contains no tests. React Testing Library, a DOM environment, and a Vitest coverage provider are not declared. Pure state/client tests fit the current configuration; component tests would require deliberate dependencies and configuration, including `.tsx` selection.
+- Vitest selects only `tests/unit/**/*.test.ts` in the Node environment; the unit directory contains one example test. React Testing Library, a DOM environment, and a Vitest coverage provider are not declared. Pure state/client tests fit the current configuration; component tests would require deliberate dependencies and configuration, including `.tsx` selection.
 - Playwright currently starts the Vite development server and runs example tests against the Playwright website. It does not start Go or verify this calculator. Replace those examples and configure both application processes for full-stack acceptance testing.
 - Backend calculator and HTTP tests generate coverage through `make -C backend test/coverage`. Frontend coverage remains separate work; do not claim both reports are available until its tooling exists.
 
@@ -145,24 +146,28 @@ For implementation changes, run focused tests first, then applicable quality gat
 
 ## Commands, hooks, and CI
 
-These commands exist now; they describe available entry points, not completed calculator verification.
+These commands exist now; they describe available entry points, not completed calculator verification. The [README command reference](../README.md#command-reference) lists every frontend script and backend target.
 
-| Command from repository root      | Purpose                                                                |
-| --------------------------------- | ---------------------------------------------------------------------- |
-| `pnpm --dir frontend dev`         | Start Vite                                                             |
-| `make -C backend run/api`         | Run the calculator HTTP server on port 4000                            |
-| `pnpm --dir frontend check`       | TypeScript build-mode checks, ESLint, and read-only Prettier check     |
-| `pnpm --dir frontend test:unit`   | Vitest in non-watch mode                                               |
-| `pnpm --dir frontend build`       | TypeScript check and Vite production build                             |
-| `pnpm --dir frontend validate`    | Frontend check, unit tests, and build                                  |
-| `pnpm --dir frontend validate:ci` | Frontend validate followed by Playwright                               |
-| `pnpm --dir frontend test:e2e`    | Playwright using its current frontend configuration                    |
-| `make -C backend test`            | Go tests                                                               |
-| `make -C backend test/coverage`   | Backend text/HTML coverage under `backend/coverage/`                   |
-| `make -C backend audit`           | Module tidiness/verification, vet, Staticcheck, and race-enabled tests |
-| `make -C backend build/api`       | Build `backend/bin/api`                                                |
+| Command from repository root      | Purpose                                                                                    |
+| --------------------------------- | ------------------------------------------------------------------------------------------ |
+| `pnpm --dir frontend dev`         | Start Vite                                                                                 |
+| `make -C backend run/api`         | Run the HTTP server on port 4000; forward flags with `ARGS='...'`                          |
+| `pnpm --dir frontend check`       | TypeScript build-mode checks, ESLint, Prettier check, and design lint                      |
+| `pnpm --dir frontend test:unit`   | Vitest in non-watch mode                                                                   |
+| `pnpm --dir frontend build`       | TypeScript check and Vite production build                                                 |
+| `pnpm --dir frontend validate`    | Frontend check, unit tests, and build                                                      |
+| `pnpm --dir frontend validate:ci` | Frontend validate followed by Playwright                                                   |
+| `pnpm --dir frontend test:e2e`    | Playwright using its current frontend configuration                                        |
+| `make -C backend test`            | Go tests                                                                                   |
+| `make -C backend test/coverage`   | Backend text/HTML coverage under `backend/coverage/`                                       |
+| `make -C backend audit`           | Module tidiness/verification, vet, Staticcheck, gosec, govulncheck, and race-enabled tests |
+| `make -C backend build/api`       | Build native `backend/bin/api` and Linux AMD64 `backend/bin/linux_amd64/api`               |
 
-Root Lefthook currently auto-formats and lints staged frontend files before commits, then runs frontend `validate` before pushes. Backend hooks are not configured. `.github/workflows/` contains a placeholder; `validate:ci` is a local script, not an installed GitHub Actions workflow.
+The backend also exposes `make -C backend help` (the default target), `make -C backend tidy`, and `make -C backend fmt`. Tidy runs module tidying, checksum verification, and vendoring; formatting is a separate `go fmt ./...` recipe. The tidy help description still mentions formatting, but the recipe does not format source or run `go fix`. Both maintenance targets remain manual.
+
+Root Lefthook runs Prettier and ESLint fixes on matching staged frontend files, then gofmt on matching staged Go files, staging those fixes automatically. Matching staged backend Go/module/Makefile changes also run `make test`. Pre-push runs frontend `validate` and backend `make audit build/api` without file filters. Audit requires a C compiler for race-enabled tests plus gosec and govulncheck on `PATH`; it runs those scanners after vet and Staticcheck and before the race-enabled tests. Both builds use `-ldflags='-s'`; the second sets `GOOS=linux GOARCH=amd64`. A failed audit prevents the subsequent builds in the hook.
+
+`.github/workflows/` contains a placeholder; `validate:ci` is a local script, not an installed GitHub Actions workflow.
 
 The intended CI runs on PRs to `main` and pushes to `main`: read-only formatting checks, frontend validation, backend audit, both coverage reports, both builds, and application E2E. Wire these gates after their tests/configuration exist. Use the actual manifests and lockfiles; do not introduce fictional root scripts. The README owns setup and runnable command details.
 
@@ -173,3 +178,11 @@ Serve static frontend assets and run one Go HTTP service. Prefer a shared public
 The Go process owns server timeouts, request cancellation, panic recovery, and a five-second graceful shutdown drain. Request bodies are limited to 64 KiB, returning `413 INVALID_REQUEST` when exceeded. Parser nesting is limited to 128 levels, counting parenthesized expressions and recursive right-hand power operands together; exceeding this returns `422 INVALID_EXPRESSION`. There is no separate token or adaptive computation budget. The body limit bounds total input size, and tree evaluation checks request cancellation at each node.
 
 The hosting target remains an open decision. Docker packaging and continuous deployment are optional. No persistence infrastructure is required.
+
+## Rate limiting and healthcheck
+
+`POST /calculate` uses a per-process, mutex-protected IP map with `golang.org/x/time/rate` token buckets. Defaults match the supplied example: enabled, 2 requests per second, burst 4; flags configure these values. Exhausted buckets return `429 RATE_LIMIT_EXCEEDED` before validation. The connection IP supplies identity; forwarded headers are ignored, so a reverse proxy shares a bucket for its clients. The map holds at most 10,000 IPs and rejects new identities with 429 when full.
+
+Cleanup runs within requests at most once per minute, removing fully refilled buckets idle for over three minutes. Retaining depleted buckets prevents extra bursts at very low configured rates. There is no cleanup goroutine to stop. CORS runs before the limiter, and preflights do not consume tokens.
+
+`GET /healthcheck` bypasses rate limiting and returns process availability, the configured environment, and the version obtained in `main.go` through `internal/vcs.Version()`. It does not probe dependencies. Environment defaults to `development`; `staging` and `production` are also accepted. Build version may be `(devel)` or empty, matching the existing version helper.

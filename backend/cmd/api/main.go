@@ -11,7 +11,10 @@ import (
 
 	"github.com/JhojanL/full-stack-calculator/backend/internal/config"
 	"github.com/JhojanL/full-stack-calculator/backend/internal/httpapi"
+	"github.com/JhojanL/full-stack-calculator/backend/internal/vcs"
 )
+
+var version = vcs.Version()
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
@@ -25,7 +28,7 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	if err := serve(ctx, cfg, httpapi.New(logger, cfg.TrustedOrigins), logger); err != nil {
+	if err := serve(ctx, cfg, httpapi.New(logger, cfg, version), logger); err != nil {
 		logger.Error("server stopped", "error", err)
 		os.Exit(1)
 	}

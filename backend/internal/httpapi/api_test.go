@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"github.com/JhojanL/full-stack-calculator/backend/internal/config"
 	"io"
 	"log/slog"
 	"net/http"
@@ -13,7 +14,7 @@ import (
 
 // TestCalculateContract exercises the actual router and strict request schema with t.
 func TestCalculateContract(t *testing.T) {
-	handler := New(slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	handler := New(slog.New(slog.NewTextHandler(io.Discard, nil)), config.Config{}, "test")
 	tests := []struct {
 		name, media, body string
 		status            int
@@ -87,7 +88,7 @@ func assertJSON(t *testing.T, actual, expected string) {
 
 // TestRouting checks missing paths and method dispatch, including Allow, with t.
 func TestRouting(t *testing.T) {
-	handler := New(nil, nil)
+	handler := New(nil, config.Config{}, "test")
 	for _, tt := range []struct {
 		method, path string
 		status       int
@@ -108,7 +109,7 @@ func TestRouting(t *testing.T) {
 // TestRequestLimits checks byte limits independently of declared Content-Length
 // and verifies that parser limits use the approved status and code with t.
 func TestRequestLimits(t *testing.T) {
-	handler := New(nil, nil)
+	handler := New(nil, config.Config{}, "test")
 	valid := `{"expression":"1"}`
 	boundary := valid + strings.Repeat(" ", maxBodyBytes-len(valid))
 	for _, tt := range []struct {

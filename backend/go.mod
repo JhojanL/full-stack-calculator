@@ -2,7 +2,10 @@ module github.com/JhojanL/full-stack-calculator/backend
 
 go 1.26.8
 
-require github.com/julienschmidt/httprouter v1.3.0
+require (
+	github.com/julienschmidt/httprouter v1.3.0
+	golang.org/x/time v0.15.0
+)
 
 require (
 	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c // indirect

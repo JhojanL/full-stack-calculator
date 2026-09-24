@@ -1,7 +1,12 @@
 package httpapi
 
 import (
+	"net"
 	"net/http"
+	"sync"
+	"time"
+
+	"golang.org/x/time/rate"
 	"slices"
 	"strings"
 )
@@ -86,4 +91,56 @@ func allowedHeaders(headers string) bool {
 		}
 	}
 	return true
+}
+
+// maxLimiterClients bounds retained IP identities within one server process.
+const maxLimiterClients = 10_000
+
+// rateLimit wraps next with the configured per-IP token buckets. Client identity
+// comes from RemoteAddr; forwarding headers are not trusted. Idle, full buckets
+// are removed on the first request after each cleanup interval.
+func (app *api) rateLimit(next http.Handler) http.Handler {
+	if !app.config.Limiter.Enabled {
+		return next
+	}
+	type client struct {
+		limiter  *rate.Limiter
+		lastSeen time.Time
+	}
+	var mu sync.Mutex
+	clients := make(map[string]*client)
+	lastCleanup := time.Now()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ip, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			ip = r.RemoteAddr
+		}
+		mu.Lock()
+		now := time.Now()
+		if now.Sub(lastCleanup) >= time.Minute {
+			for ip, c := range clients {
+				// Removing a partially refilled bucket would grant an extra burst at low rates.
+				if now.Sub(c.lastSeen) > 3*time.Minute && c.limiter.TokensAt(now) >= float64(c.limiter.Burst()) {
+					delete(clients, ip)
+				}
+			}
+			lastCleanup = now
+		}
+		c := clients[ip]
+		if c == nil && len(clients) < maxLimiterClients {
+			c = &client{limiter: rate.NewLimiter(rate.Limit(app.config.Limiter.RPS), app.config.Limiter.Burst)}
+			clients[ip] = c
+		}
+		allowed := false
+		if c != nil {
+			c.lastSeen = now
+			allowed = c.limiter.AllowN(now, 1)
+		}
+		mu.Unlock()
+		if !allowed {
+			app.errorResponse(w, r, http.StatusTooManyRequests, "RATE_LIMIT_EXCEEDED")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
