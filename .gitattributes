@@ -1,0 +1,46 @@
+# Normalize text to LF, matching .editorconfig on every platform.
+# Reference: https://github.com/gitattributes/gitattributes
+* text=auto eol=lf
+
+# Backend source and module metadata.
+*.go text diff=golang
+go.mod text
+go.sum text
+Makefile text
+
+# Frontend source and styles.
+*.js text
+*.mjs text
+*.cjs text
+*.jsx text
+*.ts text
+*.tsx text
+*.html text diff=html
+*.css text diff=css
+*.svg text
+
+# Documentation and configuration; keep dependency changes reviewable.
+*.md text diff=markdown
+*.json text
+*.jsonc text
+*.yaml text
+*.yml text
+*.toml text
+.editorconfig text
+.gitattributes text
+.gitignore text
+.gitkeep text
+.prettierrc text
+.prettierignore text
+pnpm-lock.yaml text
+
+# Shell scripts must retain Unix line endings.
+*.sh text eol=lf
+
+# Image assets must not undergo text conversion or textual merging.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
