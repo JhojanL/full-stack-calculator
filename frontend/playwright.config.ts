@@ -22,7 +22,7 @@ export default defineConfig({
 
   // Shared browser settings.
   use: {
-    baseURL: 'http://127.0.0.1:5173',
+    baseURL: 'http://localhost:5173',
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },
@@ -39,11 +39,21 @@ export default defineConfig({
     },
   ],
 
-  // Start the Vite development server before running E2E tests.
-  webServer: {
-    command: 'pnpm dev --host 127.0.0.1',
-    url: 'http://127.0.0.1:5173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  // Exercise production assets against an isolated real Go service.
+  webServer: [
+    {
+      command:
+        'pnpm build && pnpm preview --host 127.0.0.1 --port 5173 --strictPort',
+      url: 'http://127.0.0.1:5173',
+      reuseExistingServer: true,
+      timeout: 120_000,
+    },
+    {
+      command: 'make -C ../backend run/api ARGS="-limiter-enabled=false"',
+      url: 'http://127.0.0.1:4000/healthcheck',
+      reuseExistingServer: true,
+      timeout: 120_000,
+      gracefulShutdown: { signal: 'SIGTERM', timeout: 6_000 },
+    },
+  ],
 })
