@@ -12,7 +12,9 @@ import (
 
 // Config contains listener, environment, rate-limiting, and browser-origin settings.
 // An empty TrustedOrigins list disables cross-origin grants.
+// DisplayVersion requests version output instead of server startup.
 type Config struct {
+	DisplayVersion bool
 	Port           int
 	Environment    string
 	Limiter        Limiter
@@ -34,6 +36,7 @@ func Parse(args []string, output io.Writer) (Config, error) {
 	cfg := Config{}
 	flags := flag.NewFlagSet("calculator", flag.ContinueOnError)
 	flags.SetOutput(output)
+	flags.BoolVar(&cfg.DisplayVersion, "version", false, "Display version and exit")
 	flags.IntVar(&cfg.Port, "port", 4000, "API server port (1-65535)")
 	flags.StringVar(&cfg.Environment, "env", "development", "Environment (development|staging|production)")
 	flags.BoolVar(&cfg.Limiter.Enabled, "limiter-enabled", true, "Enable per-IP calculation rate limiting")
