@@ -1,5 +1,10 @@
 # Full-stack Calculator
 
+[![CI](https://github.com/JhojanL/full-stack-calculator/actions/workflows/ci.yml/badge.svg?event=pull_request)](https://github.com/JhojanL/full-stack-calculator/actions/workflows/ci.yml)
+[![Deploy frontend](https://github.com/JhojanL/full-stack-calculator/actions/workflows/deploy-frontend.yml/badge.svg?branch=master)](https://github.com/JhojanL/full-stack-calculator/actions/workflows/deploy-frontend.yml)
+[![Deploy backend](https://github.com/JhojanL/full-stack-calculator/actions/workflows/deploy-backend.yml/badge.svg?branch=master)](https://github.com/JhojanL/full-stack-calculator/actions/workflows/deploy-backend.yml)
+[![Live demo](https://img.shields.io/badge/GitHub%20Pages-Live%20demo-222222?logo=github)](https://calculator.jhojanlerma.dev)
+
 An expression calculator built with React, TypeScript, Vite, and a stateless Go REST API. The keypad supports addition, subtraction, multiplication, division, exponentiation, square root, and percentage, with parentheses and operator precedence.
 
 **Status:** the calculator UI, API client, and Go API are implemented, with unit and full-stack browser tests. GitHub Actions CI is configured for pull requests targeting `master`; frontend coverage reporting remains unconfigured. See [setup and development](#setup-and-development) to run both layers and [the specifications](#project-documents) for the application contract.
@@ -131,6 +136,10 @@ The frontend deploys to GitHub Pages at **https://calculator.jhojanlerma.dev** o
 ### Backend deployment
 
 The backend deployment workflow audits and builds the Go API, deploys it over SSH to the production droplet, and restarts `calculator.service` on pushes to `master` or manual runs from `master`. The expected public API URL is **https://calculator-api.jhojanlerma.dev**. See [backend deployment](docs/backend-deployment.md) for the deployment overview and server layout.
+
+DigitalOcean referral link:
+
+[![DigitalOcean Referral Badge](https://web-platforms.sfo2.cdn.digitaloceanspaces.com/WWW/Badge%203.svg)](https://www.digitalocean.com/?refcode=cd2290237531&utm_campaign=Referral_Invite&utm_medium=Referral_Program&utm_source=badge)
 
 ## Command reference
 
