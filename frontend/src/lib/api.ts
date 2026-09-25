@@ -42,7 +42,8 @@ const statuses: Record<string, number[]> = {
 }
 
 /**
- * Submit expression verbatim to the same-origin API and return its decimal string.
+ * Submit expression verbatim to the API and return its decimal string.
+ * Production uses VITE_API_BASE_URL when set; otherwise requests stay same-origin.
  * signal cancels the request; an independent 10-second deadline also aborts it.
  * Reject with a contractual error message, or requestFailure for invalid responses,
  * network failures, timeout, and cancellation. Always release timers/listeners.
@@ -57,7 +58,10 @@ export async function calculate(
   if (signal.aborted) cancel()
   const timeout = setTimeout(cancel, 10_000)
   try {
-    const response = await fetch('/calculate', {
+    const baseUrl = import.meta.env.PROD
+      ? (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '')
+      : ''
+    const response = await fetch(`${baseUrl}/calculate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ expression }),
