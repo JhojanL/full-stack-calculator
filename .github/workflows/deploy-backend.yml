@@ -1,0 +1,131 @@
+name: Deploy backend
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: calculator-backend-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: backend-production
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.8'
+          cache-dependency-path: backend/go.sum
+
+      - name: Install standalone security tools
+        timeout-minutes: 5
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+
+      - name: Audit backend
+        timeout-minutes: 8
+        run: make -C backend audit
+
+      - name: Build Linux AMD64 API
+        timeout-minutes: 3
+        env:
+          CGO_ENABLED: '0'
+        run: make -C backend build/api
+
+      - name: Configure SSH
+        env:
+          DEPLOY_HOST: ${{ vars.DROPLET_HOST }}
+          DEPLOY_USER: ${{ vars.DROPLET_USER }}
+          DEPLOY_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DROPLET_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
+          [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
+          test -n "$DEPLOY_KEY"
+          test -n "$DEPLOY_KNOWN_HOSTS"
+          install -m 700 -d "$RUNNER_TEMP/calculator-ssh"
+          umask 077
+          printf '%s\n' "$DEPLOY_KEY" > "$RUNNER_TEMP/calculator-ssh/key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$RUNNER_TEMP/calculator-ssh/known_hosts"
+          {
+            printf 'Host calculator\n  HostName %s\n  User %s\n' "$DEPLOY_HOST" "$DEPLOY_USER"
+            printf '  IdentityFile %s/calculator-ssh/key\n' "$RUNNER_TEMP"
+            printf '  UserKnownHostsFile %s/calculator-ssh/known_hosts\n' "$RUNNER_TEMP"
+            printf '  IdentitiesOnly yes\n  BatchMode yes\n  StrictHostKeyChecking yes\n'
+            printf '  ConnectTimeout 15\n  ServerAliveInterval 15\n  ServerAliveCountMax 3\n'
+          } > "$RUNNER_TEMP/calculator-ssh/config"
+
+      # Server setup is documented in docs/backend-deployment.md; deployments
+      # never install units or edit the shared reverse proxy.
+      - name: Deploy and verify calculator
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          remote_script=$(cat <<'REMOTE'
+          set -eu
+          test "$(uname -m)" = x86_64
+          test -d /srv/calculator
+          test ! -L /srv/calculator
+          test -w /srv/calculator
+          test ! -L /srv/calculator/api
+          test ! -d /srv/calculator/api
+          command -v curl >/dev/null
+          command -v jq >/dev/null
+          test "$(/usr/bin/systemctl show calculator.service --property=LoadState --value)" = loaded
+          runtime_user=$(/usr/bin/systemctl show calculator.service --property=User --value)
+          test -n "$runtime_user"
+          test "$runtime_user" != root
+          test "$runtime_user" != 0
+          /usr/bin/systemctl show calculator.service --property=ExecStart --value |
+            grep -F 'path=/srv/calculator/api ;' >/dev/null
+          sudo -k -n -l /usr/bin/systemctl restart calculator.service >/dev/null
+
+          # The temporary file and destination share a filesystem for atomic rename.
+          staged=$(mktemp /srv/calculator/.api.XXXXXXXXXX)
+          trap 'rm -f -- "$staged"' EXIT HUP INT TERM
+          cat > "$staged"
+          test -s "$staged"
+          chmod 755 "$staged"
+          mv -fT -- "$staged" /srv/calculator/api
+          sudo -k -n /usr/bin/systemctl restart calculator.service
+
+          for attempt in $(seq 1 15); do
+            if /usr/bin/systemctl is-active --quiet calculator.service &&
+              health=$(curl --fail --silent --show-error --noproxy '*' \
+                --connect-timeout 2 --max-time 5 \
+                http://127.0.0.1:4001/healthcheck) &&
+              printf '%s\n' "$health" |
+                jq -e -s 'length == 1 and .[0].status == "available" and .[0].system_info.environment == "production"' >/dev/null; then
+              echo 'Calculator service and healthcheck verified.'
+              exit 0
+            fi
+            sleep 2
+          done
+          echo 'Calculator health verification failed; inspect calculator.service on the server.' >&2
+          exit 1
+          REMOTE
+          )
+          ssh -F "$RUNNER_TEMP/calculator-ssh/config" calculator "$remote_script" \
+            < backend/bin/linux_amd64/api
+
+      - name: Remove runner SSH private key
+        if: always()
+        run: rm -f -- "$RUNNER_TEMP/calculator-ssh/key"
