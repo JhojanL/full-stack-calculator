@@ -1,6 +1,6 @@
 # Architecture
 
-**Status:** the Go API, React calculator, and API integration are implemented. Unit tests and full-stack Playwright scenarios exist; frontend coverage and GitHub Actions remain unconfigured. Accessibility requirements below are targets, not a certification of conformance.
+**Status:** the Go API, React calculator, and API integration are implemented. Unit tests, full-stack Playwright scenarios, and a GitHub Actions CI workflow exist; frontend coverage remains unconfigured. Accessibility requirements below are targets, not a certification of conformance.
 
 ## Scope and sources
 
@@ -168,9 +168,14 @@ The backend also exposes `make -C backend help` (the default target), `make -C b
 
 Root Lefthook runs Prettier and ESLint fixes on matching staged frontend files, then gofmt on matching staged Go files, staging those fixes automatically. Matching staged backend Go/module/Makefile changes also run `make test`. Pre-push runs frontend `validate` and backend `make audit build/api` without file filters. Audit requires a C compiler for race-enabled tests plus gosec and govulncheck on `PATH`; it runs those scanners after vet and Staticcheck and before the race-enabled tests. Both builds use `-ldflags='-s'`; the second sets `GOOS=linux GOARCH=amd64`. A failed audit prevents the subsequent builds in the hook.
 
-`.github/workflows/` contains a placeholder; `validate:ci` is a local script, not an installed GitHub Actions workflow.
+[The CI workflow](../.github/workflows/ci.yml) runs only on pull requests targeting `master`. It grants `contents: read` permission and groups concurrent runs by workflow and PR number, cancelling an earlier run when a newer run starts for the same PR. Actions are pinned to immutable commit SHAs.
 
-The intended CI runs on PRs to `main` and pushes to `main`: read-only formatting checks, frontend validation, backend audit, both coverage reports, both builds, and application E2E. Wire these gates after their tests/configuration exist. Use the actual manifests and lockfiles; do not introduce fictional root scripts. The README owns setup and runnable command details.
+Two independent jobs run on `ubuntu-24.04`, each with a 20-minute timeout. All workflow commands run from the repository root:
+
+- `frontend` installs Node `24.19.0`, pnpm `12.5.1`, and Go `1.26.8`, matching `mise.toml`. It runs `pnpm --dir frontend install --frozen-lockfile`, installs Chromium and its system dependencies with `pnpm --dir frontend exec playwright install --with-deps chromium`, then runs `pnpm --dir frontend validate:ci`. That script includes frontend checks, unit tests, the production build, and Playwright tests; Playwright starts the Go API for full-stack scenarios.
+- `backend` installs Go `1.26.8` and the standalone tools `gosec` `v2.29.0` and `govulncheck` `v1.8.0`. It runs `make -C backend audit`, followed by `make -C backend build/api` only if the audit succeeds. Staticcheck remains managed by `backend/go.mod` and runs through the audit target.
+
+Coverage reports remain outside this workflow. The workflow configuration has been checked with Actionlint; execution on GitHub Actions remains unverified. The README owns setup and runnable command details.
 
 ## Runtime and deployment
 
