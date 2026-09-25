@@ -1,5 +1,10 @@
 # Full-stack Calculator
 
+[![CI](https://github.com/JhojanL/full-stack-calculator/actions/workflows/ci.yml/badge.svg?event=pull_request)](https://github.com/JhojanL/full-stack-calculator/actions/workflows/ci.yml)
+[![Deploy frontend](https://github.com/JhojanL/full-stack-calculator/actions/workflows/deploy-frontend.yml/badge.svg?branch=master)](https://github.com/JhojanL/full-stack-calculator/actions/workflows/deploy-frontend.yml)
+[![Deploy backend](https://github.com/JhojanL/full-stack-calculator/actions/workflows/deploy-backend.yml/badge.svg?branch=master)](https://github.com/JhojanL/full-stack-calculator/actions/workflows/deploy-backend.yml)
+[![Live demo](https://img.shields.io/badge/GitHub%20Pages-Live%20demo-222222?logo=github)](https://calculator.jhojanlerma.dev)
+
 An expression calculator built with React, TypeScript, Vite, and a stateless Go REST API. The keypad supports addition, subtraction, multiplication, division, exponentiation, square root, and percentage, with parentheses and operator precedence.
 
 **Status:** the calculator UI, API client, and Go API are implemented, with unit and full-stack browser tests. GitHub Actions CI is configured for pull requests targeting `master`; frontend coverage reporting remains unconfigured. See [setup and development](#setup-and-development) to run both layers and [the specifications](#project-documents) for the application contract.
@@ -12,7 +17,7 @@ An expression calculator built with React, TypeScript, Vite, and a stateless Go 
 | [frontend/tests/unit/](frontend/tests/unit/) | Vitest editing, syntax, and API-client tests                      |
 | [frontend/tests/e2e/](frontend/tests/e2e/)   | Playwright UI and real-API integration tests                      |
 | [backend/](backend/)                         | Go HTTP service, expression evaluator, tests, and build commands  |
-| [.github/workflows/](.github/workflows/)     | Pull request CI for frontend validation and backend audit/build  |
+| [.github/workflows/](.github/workflows/)     | Pull request CI and frontend/backend deployment workflows        |
 | [docs/](docs/)                               | Requirements, API contract, architecture, and development prompts |
 
 Frontend dependencies and `pnpm-lock.yaml` live in `frontend/`; Go dependencies live in `backend/go.mod` and `backend/go.sum`. There is no root pnpm workspace or root `package.json`. Empty tracked directories use `.gitkeep` placeholders.
@@ -124,6 +129,18 @@ Run `make -C backend tidy` manually when needed. It tidies and verifies modules 
 
 All workflow commands run from the repository root. Coverage reports remain separate from CI. See [the architecture CI details](docs/architecture.md#commands-hooks-and-ci) for the workflow's validation status.
 
+### Frontend deployment
+
+The frontend deploys to GitHub Pages at **https://calculator.jhojanlerma.dev** on pushes to `master` or manual runs from `master`. See [frontend deployment](docs/frontend-deployment.md) for workflow details, Pages setup, and API/CORS configuration.
+
+### Backend deployment
+
+The backend deployment workflow audits and builds the Go API, deploys it over SSH to the production droplet, and restarts `calculator.service` on pushes to `master` or manual runs from `master`. The expected public API URL is **https://calculator-api.jhojanlerma.dev**. See [backend deployment](docs/backend-deployment.md) for the deployment overview and server layout.
+
+DigitalOcean referral link:
+
+[![DigitalOcean Referral Badge](https://web-platforms.sfo2.cdn.digitaloceanspaces.com/WWW/Badge%203.svg)](https://www.digitalocean.com/?refcode=cd2290237531&utm_campaign=Referral_Invite&utm_medium=Referral_Program&utm_source=badge)
+
 ## Command reference
 
 Run these commands from the repository root. Setup commands are listed under [setup and development](#setup-and-development). The tables below cover every script in [frontend/package.json](frontend/package.json) and every target in [backend/Makefile](backend/Makefile).
@@ -223,7 +240,7 @@ OpenAPI specifies `400` for invalid request envelopes, `413 INVALID_REQUEST` for
 - Literal conversion and every operation follow ordinary binary floating-point rounding. Exact decimal arithmetic is not promised: cancellation can lose precision, decimal ties can be affected by representation/scaling, and tiny values may underflow to zero. NaN and infinity are rejected as `NUMERIC_OUT_OF_RANGE`. Domain checks use unrounded float64 operands; integer exponents satisfy `math.Trunc(exponent) == exponent`. For example, `10^-400` yields `0`, and `1/(10^-400)` reports division by zero.
 - The interface accepts keypad input only and follows [DESIGN.md](frontend/docs/DESIGN.md), using Tailwind CSS, variable Manrope, and Lucide icons. It targets WCAG 2.2 AA, keyboard button activation, and a 320px minimum viewport width.
 - Parser nesting is limited to 128 levels, counting parentheses and right-hand power operands together. Excessive nesting returns `422 INVALID_EXPRESSION`. No separate token limit is imposed.
-- Accounts, a database, and persistent calculation history are outside scope. Hosting is undecided; optional Docker packaging is available in this working tree.
+- Accounts, a database, and persistent calculation history are outside scope. The frontend deployment targets GitHub Pages at `https://calculator.jhojanlerma.dev`, with the API at `https://calculator-api.jhojanlerma.dev`; optional Docker packaging is also available.
 
 ## Project documents
 

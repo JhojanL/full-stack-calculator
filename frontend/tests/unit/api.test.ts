@@ -1,7 +1,13 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { calculate, requestFailure } from '../../src/lib/api'
 
+beforeEach(() => {
+  vi.stubEnv('PROD', false)
+  vi.stubEnv('VITE_API_BASE_URL', undefined)
+})
+
 afterEach(() => {
+  vi.unstubAllEnvs()
   vi.unstubAllGlobals()
   vi.useRealTimers()
 })
@@ -15,6 +21,32 @@ function respond(body: unknown, status = 200) {
 }
 
 describe('API boundary', () => {
+  it.each([
+    [true, 'https://calculator-api.jhojanlerma.dev'],
+    [true, 'https://calculator-api.jhojanlerma.dev/'],
+    [true, undefined],
+    [false, 'https://calculator-api.jhojanlerma.dev'],
+  ])(
+    'routes requests with production=%s and base=%s',
+    async (production, base) => {
+      vi.stubEnv('PROD', production)
+      vi.stubEnv('VITE_API_BASE_URL', base)
+      const fetch = respond({ result: '2' })
+      await expect(
+        calculate('1+1', new AbortController().signal),
+      ).resolves.toBe('2')
+      expect(fetch).toHaveBeenCalledWith(
+        production && base
+          ? 'https://calculator-api.jhojanlerma.dev/calculate'
+          : '/calculate',
+        expect.objectContaining({
+          method: 'POST',
+          body: '{"expression":"1+1"}',
+        }),
+      )
+    },
+  )
+
   it('posts JSON and preserves large decimal results exactly', async () => {
     const result = '123456789012345678901234567890'
     const fetch = respond({ result })
