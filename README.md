@@ -2,7 +2,7 @@
 
 An expression calculator built with React, TypeScript, Vite, and a stateless Go REST API. The keypad supports addition, subtraction, multiplication, division, exponentiation, square root, and percentage, with parentheses and operator precedence.
 
-**Status:** the calculator UI, API client, and Go API are implemented, with unit and full-stack browser tests. Frontend coverage reporting and GitHub Actions remain unconfigured. See [setup and development](#setup-and-development) to run both layers and [the specifications](#project-documents) for the application contract.
+**Status:** the calculator UI, API client, and Go API are implemented, with unit and full-stack browser tests. GitHub Actions CI is configured for pull requests targeting `master`; frontend coverage reporting remains unconfigured. See [setup and development](#setup-and-development) to run both layers and [the specifications](#project-documents) for the application contract.
 
 ## Project structure
 
@@ -12,7 +12,7 @@ An expression calculator built with React, TypeScript, Vite, and a stateless Go 
 | [frontend/tests/unit/](frontend/tests/unit/) | Vitest editing, syntax, and API-client tests                      |
 | [frontend/tests/e2e/](frontend/tests/e2e/)   | Playwright UI and real-API integration tests                      |
 | [backend/](backend/)                         | Go HTTP service, expression evaluator, tests, and build commands  |
-| [.github/workflows/](.github/workflows/)     | Placeholder for future GitHub Actions workflows                   |
+| [.github/workflows/](.github/workflows/)     | Pull request CI for frontend validation and backend audit/build  |
 | [docs/](docs/)                               | Requirements, API contract, architecture, and development prompts |
 
 Frontend dependencies and `pnpm-lock.yaml` live in `frontend/`; Go dependencies live in `backend/go.mod` and `backend/go.sum`. There is no root pnpm workspace or root `package.json`. Empty tracked directories use `.gitkeep` placeholders.
@@ -113,7 +113,16 @@ The hooks in [lefthook.yml](lefthook.yml) run commands from each component's dir
 
 Both pre-push commands are configured without file filters. Backend audit checks module tidiness and checksums, runs vet, Staticcheck, gosec, and govulncheck, then runs race-enabled tests. A successful audit is followed by both API builds. Backend tests and audit check the working tree; review partially staged changes before committing.
 
-Run `make -C backend tidy` manually when needed. It tidies and verifies modules and regenerates vendored dependencies. Run `make -C backend fmt` separately to format Go source; review both commands' changes before staging. Generate coverage separately with `make -C backend test/coverage`. GitHub Actions workflows are not configured yet.
+Run `make -C backend tidy` manually when needed. It tidies and verifies modules and regenerates vendored dependencies. Run `make -C backend fmt` separately to format Go source; review both commands' changes before staging. Generate coverage separately with `make -C backend test/coverage`.
+
+### Continuous integration
+
+[The GitHub Actions workflow](.github/workflows/ci.yml) runs only on pull requests targeting `master`. Its independent `frontend` and `backend` jobs run on Ubuntu 24.04 with 20-minute timeouts. New runs cancel earlier runs for the same PR; the workflow grants read-only access to repository contents and pins actions to commit SHAs.
+
+- `frontend` uses the pinned Node, pnpm, and Go versions listed above, installs frontend dependencies with the frozen lockfile and Playwright Chromium with its system dependencies, then runs `pnpm --dir frontend validate:ci`. This includes frontend checks, unit tests, the build, and full-stack browser tests.
+- `backend` uses the pinned Go version, installs standalone `gosec` `v2.29.0` and `govulncheck` `v1.8.0`, then runs `make -C backend audit` followed by `make -C backend build/api`. Staticcheck remains managed by the Go module.
+
+All workflow commands run from the repository root. Coverage reports remain separate from CI. See [the architecture CI details](docs/architecture.md#commands-hooks-and-ci) for the workflow's validation status.
 
 ## Command reference
 
