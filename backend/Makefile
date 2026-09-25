@@ -20,7 +20,7 @@ help:
 run/api:
 	go run ./cmd/api $(ARGS)
 
-## tidy: tidy and verify dependencies, and format Go files
+## tidy: tidy, verify, and vendor dependencies
 .PHONY: tidy
 tidy:
 	go mod tidy

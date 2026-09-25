@@ -1,6 +1,6 @@
 # Architecture
 
-**Status:** the Go calculator API is implemented. The frontend and full-stack integration remain separate work; frontend descriptions below describe the target architecture.
+**Status:** the Go API, React calculator, and API integration are implemented. Unit tests and full-stack Playwright scenarios exist; frontend coverage and GitHub Actions remain unconfigured. Accessibility requirements below are targets, not a certification of conformance.
 
 ## Scope and sources
 
@@ -38,13 +38,13 @@ There is currently no root `package.json`, pnpm workspace, or root JavaScript lo
 
 ## Repository boundaries
 
-The backend packages are implemented; frontend calculator directories remain placeholders. Responsibilities are:
+The frontend and backend responsibilities are:
 
 | Path                           | Responsibility                                                                                |
 | ------------------------------ | --------------------------------------------------------------------------------------------- |
-| `frontend/src/components/`     | Calculator shell, labeled display, native keypad buttons, and icons                           |
-| `frontend/src/hooks/`          | Calculator state transitions and request lifecycle                                            |
-| `frontend/src/lib/`            | Pure editing helpers, submission validation, response schemas, and API client                 |
+| `frontend/src/components/`     | Labeled display, native keypad buttons, and icons; `App.tsx` assembles the shell              |
+| `frontend/src/hooks/`          | Reducer ownership and request lifecycle                                                       |
+| `frontend/src/lib/`            | Pure state reducer, submission validation, response schemas, and API client                   |
 | `frontend/src/types/`          | Shared action and state contracts; infer transport types from runtime schemas where practical |
 | `frontend/src/styles/`         | Tailwind entry point and semantic design tokens                                               |
 | `frontend/tests/unit/`         | Vitest tests for pure frontend behavior and API boundaries                                    |
@@ -71,6 +71,7 @@ Keep Go tests beside their packages as `_test.go` files. Domain code must not de
 | `413`       | `INVALID_REQUEST`: JSON body exceeds 64 KiB                                                                                           |
 | `415`       | `UNSUPPORTED_MEDIA_TYPE`: missing or unsupported Content-Type; JSON with UTF-8 charset is accepted                                    |
 | `422`       | Expression validation or evaluation failure, including empty expressions and every documented domain error                            |
+| `429`       | `RATE_LIMIT_EXCEEDED`: depleted per-IP bucket or full client map                                                                      |
 | `500`       | `INTERNAL_ERROR`: unexpected service failure with a generic user message                                                              |
 
 Use the exact error codes and English messages from OpenAPI. Decode exactly one object, reject duplicate keys and extra properties, and require complete body consumption. Ordinary struct decoding alone is insufficient to enforce all these constraints.
@@ -91,7 +92,7 @@ Intermediate values are not rounded to three decimal places. Final values below 
 
 ## Frontend state and API boundary
 
-Use local React state, with a reducer for explicit keypad transitions and a hook for network ownership. Model editing, pending, success, and error states with a discriminated union. Keep the expression, insertion position, displayed result string, and request identity explicit rather than relying on unrelated boolean flags. Typed button actions describe intent; components receive typed data and callbacks.
+`useCalculator` owns local React state through `calculatorReducer` and submits pending work through the API client. Model editing, pending, success, and error states with a discriminated union. Keep the expression, insertion position, displayed result string, and request identity explicit rather than relying on unrelated boolean flags. Typed button actions describe intent; components receive typed data and callbacks.
 
 Store the editable expression without decorative spacing. Move the insertion position by one digit or symbol; render spacing separately. Button actions enforce decimal-entry rules, while submission validation follows the documented grammar. The browser never evaluates arithmetic.
 
@@ -110,13 +111,13 @@ Cursor movement alone does not change the calculation or clear feedback. After `
 
 The API client owns fetch, response validation, and cancellation. Use Zod schemas matching the strict success/error envelopes, decimal-result format, and error-code enumeration; TypeScript types alone do not validate network data. Treat malformed responses, unexpected statuses, and network failures as “Could not calculate. Try again.”
 
-Retain the proposed 10-second client deadline as an architectural choice. Abort on timeout, superseding edits, clear, or unmount, and also check request identity before committing either success or failure. Aborting alone does not prevent an already completed stale response from updating state. Editing and clear remain usable while waiting; stale failures must not replace newer results either.
+The API client enforces a 10-second deadline. Abort on timeout, superseding edits, clear, or unmount, and also check request identity before committing either success or failure. Aborting alone does not prevent an already completed stale response from updating state. Editing and clear remain usable while waiting; stale failures must not replace newer results either.
 
 ## Styling and accessibility
 
 Use the approved 25-button layout and values from [DESIGN.md](../frontend/docs/DESIGN.md). Tailwind's Vite plugin and the `@import "tailwindcss"` entry point already exist. Define semantic tokens in CSS with `@theme` and reusable button variants for neutral, arithmetic, and editing controls. There is no token generator or generated theme stylesheet currently; keep authored tokens aligned with the design source.
 
-Use the declared `@fontsource-variable/manrope` package for self-hosted Manrope. The design document's static `@fontsource/manrope` import examples differ from the manifest; preserve its intended typeface and weights using the variable package. Use Lucide icons and the specified local exponent SVG, with decorative graphics hidden from assistive technology.
+The stylesheet imports `@fontsource-variable/manrope` for self-hosted Manrope, using the `Manrope Variable` family and the design-specified weights. Use Lucide icons and the specified local exponent SVG, with decorative graphics hidden from assistive technology.
 
 Native buttons provide Tab/Shift+Tab navigation and Enter/Space activation. The expression display must not accept typing, paste, or dropped text. Expose the expression and insertion position accessibly, retain focus on the activated button, and announce cursor changes, results, and errors without moving focus.
 
@@ -136,10 +137,10 @@ Verify observable contracts at the smallest useful boundary. Keep pure dependenc
 
 Go test applications must own their router and dependencies rather than mutate process-global state. Use isolated server lifetimes and register cleanup. Vitest tests should import its APIs explicitly, await asynchronous assertions, restore spies/timers, and assert outcomes rather than reducer internals or snapshots of implementation details. Use non-watch mode for automated runs. Review screen-reader feedback and visual accessibility in addition to automated assertions.
 
-Current testing gaps are explicit:
+Current test coverage and gaps are explicit:
 
-- Vitest selects only `tests/unit/**/*.test.ts` in the Node environment; the unit directory contains one example test. React Testing Library, a DOM environment, and a Vitest coverage provider are not declared. Pure state/client tests fit the current configuration; component tests would require deliberate dependencies and configuration, including `.tsx` selection.
-- Playwright currently starts the Vite development server and runs example tests against the Playwright website. It does not start Go or verify this calculator. Replace those examples and configure both application processes for full-stack acceptance testing.
+- Vitest selects only `tests/unit/**/*.test.ts` in the Node environment; the suites cover editing, grammar, request identities, strict responses, cancellation, and timeout. React Testing Library, a DOM environment, and a Vitest coverage provider are not declared. Pure state/client tests fit the current configuration; component tests would require deliberate dependencies and configuration, including `.tsx` selection.
+- Playwright builds the frontend, serves it through Vite preview, and starts Go with the limiter disabled. Desktop and mobile Chromium scenarios cover real calculations, editing, keyboard focus, delayed/reset requests, retry, and narrow/enlarged layouts. Existing servers on ports 5173 and 4000 are reused; their configuration must match the test setup. Automated assertions do not replace manual screen-reader and visual review.
 - Backend calculator and HTTP tests generate coverage through `make -C backend test/coverage`. Frontend coverage remains separate work; do not claim both reports are available until its tooling exists.
 
 For implementation changes, run focused tests first, then applicable quality gates. Empty suites, skipped scenarios, and unrelated example tests are not evidence that calculator requirements pass. For documentation-only changes, verify formatting, links, and consistency with the source contracts without adding tests that merely match prose.
@@ -163,7 +164,7 @@ These commands exist now; they describe available entry points, not completed ca
 | `make -C backend audit`           | Module tidiness/verification, vet, Staticcheck, gosec, govulncheck, and race-enabled tests |
 | `make -C backend build/api`       | Build native `backend/bin/api` and Linux AMD64 `backend/bin/linux_amd64/api`               |
 
-The backend also exposes `make -C backend help` (the default target), `make -C backend tidy`, and `make -C backend fmt`. Tidy runs module tidying, checksum verification, and vendoring; formatting is a separate `go fmt ./...` recipe. The tidy help description still mentions formatting, but the recipe does not format source or run `go fix`. Both maintenance targets remain manual.
+The backend also exposes `make -C backend help` (the default target), `make -C backend tidy`, and `make -C backend fmt`. Tidy runs module tidying, checksum verification, and vendoring; formatting is a separate `go fmt ./...` recipe. Tidy does not format source or run `go fix`. Both maintenance targets remain manual.
 
 Root Lefthook runs Prettier and ESLint fixes on matching staged frontend files, then gofmt on matching staged Go files, staging those fixes automatically. Matching staged backend Go/module/Makefile changes also run `make test`. Pre-push runs frontend `validate` and backend `make audit build/api` without file filters. Audit requires a C compiler for race-enabled tests plus gosec and govulncheck on `PATH`; it runs those scanners after vet and Staticcheck and before the race-enabled tests. Both builds use `-ldflags='-s'`; the second sets `GOOS=linux GOARCH=amd64`. A failed audit prevents the subsequent builds in the hook.
 
@@ -173,11 +174,11 @@ The intended CI runs on PRs to `main` and pushes to `main`: read-only formatting
 
 ## Runtime and deployment
 
-Serve static frontend assets and run one Go HTTP service. Prefer a shared public origin with `/calculate` routed to Go. Configure a Vite development proxy for that same path; no proxy exists in the current Vite configuration. If hosting uses separate origins, configure the API base URL and an explicit CORS origin allowlist. Keep asset paths independent of the API base URL.
+The client posts to the relative `/calculate` URL. Vite development and preview both proxy that path to `http://127.0.0.1:4000`; neither proxies `/healthcheck`. Static hosting must provide equivalent API routing. Separate-origin hosting would require a client URL change and an explicit backend CORS allowlist; no configurable API base URL currently exists.
 
 The Go process owns server timeouts, request cancellation, panic recovery, and a five-second graceful shutdown drain. Request bodies are limited to 64 KiB, returning `413 INVALID_REQUEST` when exceeded. Parser nesting is limited to 128 levels, counting parenthesized expressions and recursive right-hand power operands together; exceeding this returns `422 INVALID_EXPRESSION`. There is no separate token or adaptive computation budget. The body limit bounds total input size, and tree evaluation checks request cancellation at each node.
 
-The hosting target remains an open decision. Docker packaging and continuous deployment are optional. No persistence infrastructure is required.
+The hosting target remains an open decision. The working tree includes optional Docker packaging: Nginx serves the built frontend on port 8080 and proxies `/calculate` and `/healthcheck` to Go on the Compose network. The backend keeps its default limiter, so clients through that proxy share a bucket. Docker runtime behavior has not been verified by this documentation review. Continuous deployment remains unconfigured. No persistence infrastructure is required.
 
 ## Rate limiting and healthcheck
 

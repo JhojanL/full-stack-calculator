@@ -81,6 +81,7 @@ func (app *api) enableCORS(next http.Handler, origins []string) http.Handler {
 }
 
 // allowedHeaders reports whether comma-separated headers request only Content-Type.
+// An empty list is allowed; comparison ignores case and surrounding whitespace.
 func allowedHeaders(headers string) bool {
 	if headers == "" {
 		return true

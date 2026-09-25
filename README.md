@@ -1,16 +1,16 @@
 # Full-stack Calculator
 
-An expression calculator being built with React, TypeScript, Vite, and a stateless Go REST API. The planned keypad supports addition, subtraction, multiplication, division, exponentiation, square root, and percentage, with parentheses and operator precedence.
+An expression calculator built with React, TypeScript, Vite, and a stateless Go REST API. The keypad supports addition, subtraction, multiplication, division, exponentiation, square root, and percentage, with parentheses and operator precedence.
 
-**Status:** the stateless Go calculator API is implemented and tested. Frontend calculator UI and API integration remain separate work. See [setup and development](#setup-and-development) to run the backend and [the specifications](#project-documents) for the application contract.
+**Status:** the calculator UI, API client, and Go API are implemented, with unit and full-stack browser tests. Frontend coverage reporting and GitHub Actions remain unconfigured. See [setup and development](#setup-and-development) to run both layers and [the specifications](#project-documents) for the application contract.
 
 ## Project structure
 
 | Directory                                    | Purpose                                                           |
 | -------------------------------------------- | ----------------------------------------------------------------- |
 | [frontend/](frontend/)                       | React UI, API client, styles, and frontend tooling                |
-| [frontend/tests/unit/](frontend/tests/unit/) | Vitest unit tests; currently one example                          |
-| [frontend/tests/e2e/](frontend/tests/e2e/)   | Playwright configuration's test location; currently example tests |
+| [frontend/tests/unit/](frontend/tests/unit/) | Vitest editing, syntax, and API-client tests                      |
+| [frontend/tests/e2e/](frontend/tests/e2e/)   | Playwright UI and real-API integration tests                      |
 | [backend/](backend/)                         | Go HTTP service, expression evaluator, tests, and build commands  |
 | [.github/workflows/](.github/workflows/)     | Placeholder for future GitHub Actions workflows                   |
 | [docs/](docs/)                               | Requirements, API contract, architecture, and development prompts |
@@ -41,7 +41,7 @@ pnpm --dir frontend install --frozen-lockfile
 
 Backend audit and the pre-push hook also require a C compiler for race-enabled tests and the standalone `gosec` and `govulncheck` executables on `PATH`. These two security tools are not installed or version-pinned by `mise.toml` or `backend/go.mod`; Staticcheck is managed by the Go module.
 
-Use the existing pins; there is no need to generate a new `mise.toml`. The older [prerequisites guide](docs/prerequisites.md) includes mise installation instructions, but its scaffold status and version-selection sections are outdated; use the configuration and commands above for this checkout.
+Use the existing pins; there is no need to generate a new `mise.toml`. The [prerequisites guide](docs/prerequisites.md) covers mise installation and component setup.
 
 ### Run the frontend
 
@@ -49,7 +49,7 @@ Use the existing pins; there is no need to generate a new `mise.toml`. The older
 pnpm --dir frontend dev --host 127.0.0.1
 ```
 
-Open the local URL printed by Vite. The current outcome is the starter screen, not a working calculator. No API proxy is configured yet.
+Open the local URL printed by Vite. Start the [backend](#backend-entry-point) in a second terminal before calculating. Both Vite development and preview servers proxy `/calculate` to `http://127.0.0.1:4000`; `/healthcheck` is accessed directly on Go. Use the keypad to enter `2 + 3 × 4`, then activate `=` to display `14`.
 
 To build and preview the static frontend:
 
@@ -74,7 +74,7 @@ For direct browser requests from a separate frontend origin, set an explicit all
 make -C backend run/api ARGS='-cors-trusted-origins=http://localhost:5173'
 ```
 
-Origins must include the scheme and optional port, with no path or trailing slash. The default empty allowlist grants no cross-origin access. A shared origin with `/calculate` proxied to Go is also supported; frontend proxy configuration is separate work.
+Origins must include the scheme and optional port, with no path or trailing slash. The default empty allowlist grants no cross-origin access. The current frontend uses a relative `/calculate` URL through the Vite proxy, so local setup needs no CORS flag. If you change Go's port, update both proxy targets in `frontend/vite.config.ts`. Direct cross-origin use would also require changing the client URL.
 
 The calculation endpoint uses per-IP rate limiting by default: 2 requests per second with a burst of 4. Configure it with `-limiter-rps`, `-limiter-burst`, or disable it with `-limiter-enabled=false`. Excess requests return `429 RATE_LIMIT_EXCEEDED`. Each server process has its own buckets. Client IPs come from the connection, so requests through the same reverse proxy share a bucket; forwarded IP headers are ignored. The limiter retains at most 10,000 IPs and rejects new IPs with 429 when full. On incoming requests, it checks at most once per minute for fully refilled buckets idle for over three minutes.
 
@@ -85,6 +85,16 @@ curl http://localhost:4000/healthcheck
 ```
 
 `make -C backend help` lists the available targets. `make -C backend build/api` produces a native binary at `backend/bin/api` and a Linux AMD64 binary at `backend/bin/linux_amd64/api`, both with `-ldflags='-s'`. Run the native binary with the same flags, for example `./backend/bin/api -port=8080`.
+
+### Optional Docker setup
+
+The working tree includes [Compose configuration](compose.yaml), component Dockerfiles, and an Nginx proxy. With Docker and the Compose plugin installed, run from the repository root:
+
+```bash
+docker compose up --build
+```
+
+The configuration publishes the frontend on `http://localhost:8080` and proxies `/calculate` and `/healthcheck` to the internal Go service. It uses the default API limiter, so clients behind Nginx share its connection-IP bucket. This packaging has not been runtime-verified as part of the documentation review.
 
 ### Git hooks
 
@@ -145,22 +155,22 @@ Run these commands from the repository root. Setup commands are listed under [se
 | `make -C backend audit`         | Check module tidiness/checksums, run vet, Staticcheck, gosec, govulncheck, and race-enabled tests          |
 | `make -C backend build/api`     | Build native `backend/bin/api` and Linux AMD64 `backend/bin/linux_amd64/api` binaries with `-ldflags='-s'` |
 
-The `tidy` help text still mentions formatting, but its recipe only maintains dependencies; use `fmt` for formatting. No target runs `go fix`.
+`tidy` maintains dependencies; use `fmt` for formatting. No target runs `go fix`.
 
 ## Tests and coverage
 
-Backend tests exercise the calculator API; frontend tests currently contain examples. See the [command reference](#command-reference) for individual checks and combined validation commands.
+Backend tests exercise the calculator API; frontend tests exercise editing, validation, response handling, and rendered full-stack behavior. See the [command reference](#command-reference) for individual checks and combined validation commands.
 
-Vitest selects `frontend/tests/unit/**/*.test.ts` in a Node environment. The current example checks `Math.sqrt`; it does not test calculator behavior. A DOM/component testing setup and frontend coverage provider/script have not been added.
+Vitest selects `frontend/tests/unit/**/*.test.ts` in a Node environment. The suites cover cursor edits, decimal entry, result reuse, duplicate/stale completions, grammar, strict response validation, transport failures, cancellation, and timeout. A DOM/component testing setup and frontend coverage provider/script have not been added.
 
-Playwright starts Vite automatically and defines desktop and mobile Chromium projects. Install its browser and required system dependencies before running it:
+Playwright builds and serves production assets through Vite preview and starts Go with rate limiting disabled. It defines desktop and mobile Chromium projects. Install its browser and required system dependencies before running it:
 
 ```bash
 pnpm --dir frontend exec playwright install --with-deps chromium
 pnpm --dir frontend test:e2e
 ```
 
-System dependency installation may require administrator privileges. The current example tests visit the Playwright website and require internet access; they do not test this calculator or start Go. Reports are written under `frontend/playwright-report/`; open the HTML report with `pnpm --dir frontend test:e2e:report`.
+System dependency installation may require administrator privileges. Tests cover real calculations, error correction, rounded continuation, keypad editing, keyboard focus, loading/reset, network retry, and 320px layout with enlarged text and long values. Delayed responses and transport failures use controlled routes. The configuration reuses servers already listening on ports 5173 and 4000; stop unrelated servers first, and ensure any reused backend has rate limiting disabled. Reports are written under `frontend/playwright-report/`; open the HTML report with `pnpm --dir frontend test:e2e:report`.
 
 Backend tests cover calculation rules, float64 behavior, strict HTTP envelopes, CORS, rate limiting, healthchecks, panic recovery, configuration, and server lifecycle. The coverage target writes `backend/coverage/coverage.out` and `backend/coverage/coverage.html`. Race-enabled checks require a C compiler. Staticcheck is managed through Go's tool directive at module version `v0.8.1` and invoked by the audit target; no separate global installation is needed.
 
@@ -199,12 +209,12 @@ OpenAPI specifies `400` for invalid request envelopes, `413 INVALID_REQUEST` for
 ## Design decisions and assumptions
 
 - React owns keypad editing and presentation; Go independently parses, validates, and calculates every submitted expression. Routing uses `httprouter v1.3.0` alongside `net/http`.
-- Use Go `float64` arithmetic throughout, including `math.Sqrt` and `math.Pow`. Do not round intermediates to three places. For final magnitudes below `2^52`, apply `math.Round(value * 1000) / 1000` and fixed three-place formatting; larger float64 values have no fractional bits and are formatted without scaling. Remove trailing fractional zeros and negative zero, and never use exponent notation. The frontend should display these strings directly.
+- Use Go `float64` arithmetic throughout, including `math.Sqrt` and `math.Pow`. Do not round intermediates to three places. For final magnitudes below `2^52`, apply `math.Round(value * 1000) / 1000` and fixed three-place formatting; larger float64 values have no fractional bits and are formatted without scaling. Remove trailing fractional zeros and negative zero, and never use exponent notation. The frontend displays these strings directly.
 - Continuing from a result uses the displayed rounded value: `1 / 3 → 0.333`, then `× 3 → 0.999`. Each API request is independent.
 - Literal conversion and every operation follow ordinary binary floating-point rounding. Exact decimal arithmetic is not promised: cancellation can lose precision, decimal ties can be affected by representation/scaling, and tiny values may underflow to zero. NaN and infinity are rejected as `NUMERIC_OUT_OF_RANGE`. Domain checks use unrounded float64 operands; integer exponents satisfy `math.Trunc(exponent) == exponent`. For example, `10^-400` yields `0`, and `1/(10^-400)` reports division by zero.
-- The planned interface accepts keypad input only and follows [DESIGN.md](frontend/docs/DESIGN.md), using Tailwind CSS, variable Manrope, and Lucide icons. It targets WCAG 2.2 AA, keyboard button activation, and a 320px minimum viewport width.
+- The interface accepts keypad input only and follows [DESIGN.md](frontend/docs/DESIGN.md), using Tailwind CSS, variable Manrope, and Lucide icons. It targets WCAG 2.2 AA, keyboard button activation, and a 320px minimum viewport width.
 - Parser nesting is limited to 128 levels, counting parentheses and right-hand power operands together. Excessive nesting returns `422 INVALID_EXPRESSION`. No separate token limit is imposed.
-- Accounts, a database, and persistent calculation history are outside scope. Hosting is undecided; Docker packaging is optional.
+- Accounts, a database, and persistent calculation history are outside scope. Hosting is undecided; optional Docker packaging is available in this working tree.
 
 ## Project documents
 
@@ -213,4 +223,5 @@ OpenAPI specifies `400` for invalid request envelopes, `413 INVALID_REQUEST` for
 - [OpenAPI contract](docs/openapi.yaml)
 - [Architecture](docs/architecture.md)
 - [Visual design](frontend/docs/DESIGN.md)
+- [Prerequisites](docs/prerequisites.md)
 - [Development prompts](docs/prompts.md)

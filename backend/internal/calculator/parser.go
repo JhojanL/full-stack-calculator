@@ -11,6 +11,7 @@ type token struct {
 	value float64
 }
 
+// node uses 'n' for literals and '~' for unary minus; unary operands use left.
 type node struct {
 	op          rune
 	value       float64
@@ -136,6 +137,7 @@ func (p *parser) take(kind rune) bool {
 	return true
 }
 
+// sum folds addition and subtraction left to right.
 func (p *parser) sum() (*node, error) {
 	n, err := p.product()
 	for err == nil && (p.peek() == '+' || p.peek() == '-') {
@@ -148,6 +150,7 @@ func (p *parser) sum() (*node, error) {
 	return n, err
 }
 
+// product folds multiplication and division left to right.
 func (p *parser) product() (*node, error) {
 	n, err := p.unary()
 	for err == nil && (p.peek() == '*' || p.peek() == '/') {
@@ -160,6 +163,7 @@ func (p *parser) product() (*node, error) {
 	return n, err
 }
 
+// unary permits one leading minus, applied after any power expression.
 func (p *parser) unary() (*node, error) {
 	negative := p.take('-')
 	n, err := p.power()
@@ -169,6 +173,8 @@ func (p *parser) unary() (*node, error) {
 	return n, err
 }
 
+// power applies one postfix percent before a right-associative power.
+// Parsing the exponent through unary also permits negative exponents.
 func (p *parser) power() (*node, error) {
 	n, err := p.primary()
 	if err != nil {
@@ -184,6 +190,8 @@ func (p *parser) power() (*node, error) {
 	return n, nil
 }
 
+// primary accepts a group, root, or number. An ungrouped root consumes only
+// a possibly negative number, leaving following operators to the outer parser.
 func (p *parser) primary() (*node, error) {
 	if p.take('(') {
 		n, err := p.nested(p.sum)

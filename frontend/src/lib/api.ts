@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+/** User-facing fallback for transport failures and responses outside the API contract. */
 export const requestFailure = 'Could not calculate. Try again.'
 const messages = {
   INVALID_REQUEST:
@@ -40,7 +41,12 @@ const statuses: Record<string, number[]> = {
   INTERNAL_ERROR: [500],
 }
 
-/** Submit an expression; the caller's signal cancels work and a 10s deadline bounds waiting. */
+/**
+ * Submit expression verbatim to the same-origin API and return its decimal string.
+ * signal cancels the request; an independent 10-second deadline also aborts it.
+ * Reject with a contractual error message, or requestFailure for invalid responses,
+ * network failures, timeout, and cancellation. Always release timers/listeners.
+ */
 export async function calculate(
   expression: string,
   signal: AbortSignal,

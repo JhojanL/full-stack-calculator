@@ -1,13 +1,15 @@
 import { expect, test, type Page } from '@playwright/test'
 
-/** Activate the named keypad buttons on the supplied browser page. */
+/** Activate names in order as exact keypad button labels on page. */
 async function press(page: Page, ...names: string[]) {
   for (const name of names)
     await page.getByRole('button', { name, exact: true }).click()
 }
 
+/** Locate the labeled result region on page for text, focus, and overflow assertions. */
 const result = (page: Page) =>
   page.getByRole('region', { name: 'Result', exact: true })
+/** Locate the expression region on page by its changing accessible description. */
 const expression = (page: Page) =>
   page.getByRole('region', { name: /^Expression:/ })
 

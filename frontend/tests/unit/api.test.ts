@@ -5,6 +5,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
   vi.useRealTimers()
 })
+/** Stub fetch with JSON-encoded body and HTTP status (200 by default); return the spy. */
 function respond(body: unknown, status = 200) {
   const fetch = vi
     .fn<typeof globalThis.fetch>()

@@ -1,6 +1,6 @@
 # Prerequisites with mise
 
-These commands target Linux with Bash. Run the project commands from the repository root. This guide documents setup; `mise.toml` and application manifests have not been created yet.
+These commands target Linux with Bash. Run the project commands from the repository root. The repository already includes `mise.toml`, frontend manifests, and a Go module. Install Git and Make before using the project commands.
 
 ## 1. Install mise
 
@@ -35,37 +35,18 @@ mise --version
 
 If mise was installed through a system package manager, use `eval "$(mise activate bash)"` instead. Activation selects project tools when you enter the repository. See [mise getting started](https://mise.jdx.dev/getting-started.html).
 
-## 3. Create mise.toml and install project tools
+## 3. Install the pinned project tools
 
-Enter your local checkout; replace this example path if needed:
-
-```bash
-cd ~/dev-work/projects/full-stack-calculator
-```
-
-Run this command once when initializing the tool configuration:
-
-```bash
-mise use --path mise.toml --pin node@24 go@1.26 pnpm@12
-cat mise.toml
-```
-
-This installs Node.js 24.x, Go 1.26.x, and pnpm 10.x and writes their resolved exact versions under `[tools]` in the root `mise.toml`. Node and Go follow the [architecture](architecture.md); pnpm 10 is the initial package-manager choice. `--path` explicitly selects the project file, and `--pin` records concrete versions rather than moving version ranges. See the [mise use reference](https://mise.jdx.dev/cli/use.html).
-
-Keep the generated `mise.toml` in version control when you initialize Git. Re-running this selection command later can change the pins; use the next section for routine installation.
-
-## 4. Install from an existing mise.toml
-
-For another machine or a fresh checkout, review the project configuration, then run from the repository root:
+From your checkout, review [mise.toml](../mise.toml), then run:
 
 ```bash
 mise trust
 mise install
 ```
 
-This installs the versions already recorded in the configuration. See [mise getting started](https://mise.jdx.dev/getting-started.html).
+Use the existing pins for Node, pnpm, Go, and Lefthook. Running `mise use` to select new versions would change the project configuration. See [mise getting started](https://mise.jdx.dev/getting-started.html).
 
-## 5. Verify the tools
+## 4. Verify the tools
 
 ```bash
 mise ls
@@ -77,11 +58,21 @@ mise doctor
 
 Confirm Node reports `v24.x`, Go reports `go1.26.x`, and pnpm reports `12.x`, with exact versions matching `mise.toml`. `mise exec` uses the project tools even without shell activation.
 
-## Later implementation prerequisites
+## 5. Install application dependencies
 
-- React, Vite, TypeScript, testing libraries, and JavaScript quality tools will be installed through the planned pnpm manifests.
-- Staticcheck and gosec versions still need to be selected when backend checks are configured. `gofmt` and `go vet` come with Go.
-- Go's planned race-detector checks require a C compiler. On Ubuntu or Debian, install the build tools with `sudo apt install -y build-essential`. See [Go race detector requirements](https://go.dev/doc/articles/race_detector#Requirements).
-- Playwright browser installation belongs to the later end-to-end test setup.
+```bash
+pnpm --dir frontend install --frozen-lockfile
+(cd backend && go mod download)
+lefthook install
+```
 
-Application installation, development, and test commands will be documented once their manifests and scripts exist.
+The [root README](../README.md#setup-and-development) explains how to start both layers and lists all validation commands. No database or credentials are required.
+
+## Additional check prerequisites
+
+- Staticcheck is pinned in `backend/go.mod` and invoked with `go tool staticcheck`; `gofmt` and `go vet` come with Go.
+- Backend audit and pre-push require standalone `gosec` and `govulncheck` executables on `PATH`. This repository does not pin or install these tools.
+- Race-enabled tests require a C compiler. On Ubuntu or Debian, the build tools can be installed with `sudo apt install -y build-essential`.
+- Install Chromium and its system dependencies before browser tests with `pnpm --dir frontend exec playwright install --with-deps chromium`. System dependency installation may require administrator privileges.
+- Frontend coverage tooling remains unconfigured. Backend coverage is available through `make -C backend test/coverage`.
+- Docker and the Compose plugin are needed only for the optional container setup.

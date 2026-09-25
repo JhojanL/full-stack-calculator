@@ -2,6 +2,7 @@ import { Display } from './components/Display'
 import { Keypad } from './components/Keypad'
 import { useCalculator } from './hooks/useCalculator'
 
+/** Connect the calculator state to its display, loading status, and keypad. */
 export default function App() {
   const { state, dispatch } = useCalculator()
   const pending = state.feedback.kind === 'pending'

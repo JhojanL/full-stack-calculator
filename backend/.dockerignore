@@ -1,0 +1,15 @@
+**/.git
+**/.env
+**/.env.*
+**/.dev.vars
+**/.dev.vars.*
+**/*.log
+**/*.test
+.DS_Store
+.idea
+.vscode
+bin
+coverage
+vendor
+tmp
+*.md

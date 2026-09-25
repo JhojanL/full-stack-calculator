@@ -106,12 +106,16 @@ const keys: Key[] = [
   },
 ]
 
-/** Create a text key for a single decimal digit. */
+/** Create a text key whose label and inserted value are the supplied single decimal digit. */
 function digit(value: string): Key {
   return { label: value, face: value, action: { type: 'insert', value } }
 }
 
-/** Render ordered keys; onAction receives intent and pending guards the equals key. */
+/**
+ * Render ordered keys; onAction receives the activated key's action.
+ * pending marks equals as aria-disabled while keeping it focusable. The caller
+ * must suppress duplicate calculations because button clicks still dispatch.
+ */
 export function Keypad({
   onAction,
   pending,

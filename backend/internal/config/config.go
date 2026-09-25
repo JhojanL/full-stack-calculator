@@ -27,7 +27,9 @@ type Limiter struct {
 	Burst   int
 }
 
-// Parse reads args without process-global flags and writes flag help/errors to output.
+// Parse reads CLI args (excluding the executable name) without process-global flags.
+// Empty args select defaults; output receives flag help/errors (nil uses stderr).
+// On error, the returned Config may be partial and must not be used to start the API.
 func Parse(args []string, output io.Writer) (Config, error) {
 	cfg := Config{}
 	flags := flag.NewFlagSet("calculator", flag.ContinueOnError)

@@ -1,6 +1,7 @@
 import type { CalculatorAction, CalculatorState } from '../types/calculator'
 import { validateExpression } from './validation'
 
+/** Empty editor state; reducer callers must treat this shared value as immutable. */
 export const initialState: CalculatorState = {
   expression: '',
   cursor: 0,
@@ -9,13 +10,20 @@ export const initialState: CalculatorState = {
   requestId: 0,
 }
 
-/** Apply a keypad or request action to the current state without evaluating it. */
+/**
+ * Apply action to state without mutation or arithmetic evaluation.
+ * Insert actions carry one keypad digit or symbol; request completions carry the
+ * pending ID. Ignored actions may return state unchanged. A valid calculate
+ * action records a pending expression for the hook to submit.
+ */
 export function calculatorReducer(
   state: CalculatorState,
   action: CalculatorAction,
 ): CalculatorState {
+  // Preserve the sequence so a response from before reset cannot match a new request.
   if (action.type === 'clear')
     return { ...initialState, requestId: state.requestId }
+  // Cancellation can race with completion; accept only the currently pending ID.
   if (action.type === 'success' || action.type === 'failure') {
     if (state.feedback.kind !== 'pending' || state.feedback.id !== action.id)
       return state

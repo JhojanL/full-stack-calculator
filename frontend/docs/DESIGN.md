@@ -136,7 +136,7 @@ components:
 
 A focused expression calculator for desktop and mobile. Preserve the approved dark, tactile design: an inset display, softly raised keys, mint arithmetic buttons, and distinct warm-gray delete/reset buttons. The result is the strongest typographic element; the full-width equals button is the primary action.
 
-This file follows the [Google Labs DESIGN.md format](https://github.com/google-labs-code/design.md/blob/main/docs/spec.md). Tokens define exact implementation values; the generated image guides appearance. Use [calculator-behavior.md](calculator-behavior.md) for evaluation and editing rules. The visual references are Linear's dark surfaces and tonik's tactile calculator buttons.
+This file follows the [Google Labs DESIGN.md format](https://github.com/google-labs-code/design.md/blob/main/docs/spec.md). Tokens define exact implementation values; the generated image guides appearance. Use [calculator-behavior.md](../../docs/calculator-behavior.md) for evaluation and editing rules. The visual references are Linear's dark surfaces and tonik's tactile calculator buttons.
 
 ## Colors
 
@@ -155,7 +155,7 @@ Base contrast ratios: dark symbols on mint **9.38:1**; dark symbols on warm gray
 
 ## Typography
 
-Use **[Manrope from Fontsource](https://fontsource.org/fonts/manrope)**, with `system-ui, sans-serif` as fallbacks. Its geometric forms add character while keeping the interface close to the approved design. Self-host with `@fontsource/manrope` and import `@fontsource/manrope/400.css` and `@fontsource/manrope/500.css` once. Use tabular numerals for expressions and results. Keep labels sentence case: “Expression” and “Result.” Values align right; labels align left.
+Use **[Manrope from Fontsource](https://fontsource.org/fonts/manrope)**, with `system-ui, sans-serif` as fallbacks. Its geometric forms add character while keeping the interface close to the approved design. The implementation self-hosts the variable font with `@fontsource-variable/manrope`, imported once in `src/styles/global.css`, and uses the family `Manrope Variable`. Use tabular numerals for expressions and results. Keep labels sentence case: “Expression” and “Result.” Values align right; labels align left.
 
 Result: 56px, expression/key symbols: 24px, labels: 12px, status: 14px, error messages: 16px at the default 16px root size. Use rem sizing so text scales with user preferences. Keep the result noticeably larger than the expression; allow the display to grow instead of clipping enlarged text.
 

@@ -6,12 +6,14 @@ import {
 import { validateExpression } from '../../src/lib/validation'
 import type { CalculatorState } from '../../src/types/calculator'
 
+/** Insert expression one symbol at a time into state, defaulting to an empty editor. */
 function enter(expression: string, state = initialState): CalculatorState {
   return [...expression].reduce(
     (current, value) => reduce(current, { type: 'insert', value }),
     state,
   )
 }
+/** Submit expression from an empty editor and complete it with the supplied result string. */
 function success(expression: string, result: string) {
   const pending = reduce(enter(expression), { type: 'calculate' })
   return reduce(pending, { type: 'success', id: pending.requestId, result })

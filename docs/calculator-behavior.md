@@ -8,19 +8,19 @@ Build expressions using the on-screen buttons only. The display does not accept 
 
 Button faces use digits, mathematical symbols, or action icons. Give each button an accessible name; visible word labels are unnecessary.
 
-| Button | Behavior |
-| --- | --- |
-| `0–9` | Insert a digit at the current insertion point. |
-| `.` | Insert a decimal point. Start a new decimal with `0.` and prevent a second decimal point in the same number. |
-| `+`, `−`, `×`, `÷` | Insert the operator. Use `−` before a value to enter a negative number. |
-| `xʸ` | Insert the power operator, displayed as `^`. |
-| `√` | Insert `√`, which applies to the next number. Use parentheses for an expression: `√9` or `√(9 + 5)`. |
-| `%` | Apply percentage to the preceding value. |
-| `(` and `)` | Insert parentheses to control grouping. |
-| `←` and `→` | Move the insertion point one digit or symbol left or right, skipping decorative spacing. Stop at the expression boundaries. |
-| Backspace icon | Remove the digit or symbol immediately before the insertion point. |
-| Clear icon | Reset to an empty expression and result `0`; clear the insertion point and errors. |
-| `=` | Validate and calculate the complete expression. |
+| Button             | Behavior                                                                                                                    |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `0–9`              | Insert a digit at the current insertion point.                                                                              |
+| `.`                | Insert a decimal point. Start a new decimal with `0.` and prevent a second decimal point in the same number.                |
+| `+`, `−`, `×`, `÷` | Insert the operator. Use `−` before a value to enter a negative number.                                                     |
+| `xʸ`               | Insert the power operator, displayed as `^`.                                                                                |
+| `√`                | Insert `√`, which applies to the next number. Use parentheses for an expression: `√9` or `√(9 + 5)`.                        |
+| `%`                | Apply percentage to the preceding value.                                                                                    |
+| `(` and `)`        | Insert parentheses to control grouping.                                                                                     |
+| `←` and `→`        | Move the insertion point one digit or symbol left or right, skipping decorative spacing. Stop at the expression boundaries. |
+| Backspace icon     | Remove the digit or symbol immediately before the insertion point.                                                          |
+| Clear icon         | Reset to an empty expression and result `0`; clear the insertion point and errors.                                          |
+| `=`                | Validate and calculate the complete expression.                                                                             |
 
 Keep the insertion point visible. Buttons insert at that position, allowing a user to navigate, delete, and replace part of an expression. Arrow movement does not alter the calculation. Do not automatically change operators or insert missing multiplication signs.
 
@@ -32,16 +32,16 @@ Keep the insertion point visible. Buttons insert at that position, allowing a us
 - Percentage always divides by 100: `200 × 10%` is `20`; `200 + 10%` is `200.1`. To add 10% to 200, use `200 × (1 + 10%)`.
 - Square root applies to the next number or parenthesized expression and returns the nonnegative root: `√9 + 5` is `8`; `√(9 + 5)` displays `3.742`. Negative bases in powers require whole-number exponents. Reject negative square roots, division by zero, `0^0`, and zero raised to a negative power.
 
-| Expression | Displayed result |
-| --- | --- |
-| `2 + 3 × 4` | `14` |
-| `(2 + 3) × 4` | `20` |
-| `2^3^2` | `512` |
-| `5 − 8` | `-3` |
-| `1 ÷ 3` | `0.333` |
-| `−2 ÷ 3` | `-0.667` |
-| `√2` | `1.414` |
-| `200 × 10%` | `20` |
+| Expression    | Displayed result |
+| ------------- | ---------------- |
+| `2 + 3 × 4`   | `14`             |
+| `(2 + 3) × 4` | `20`             |
+| `2^3^2`       | `512`            |
+| `5 − 8`       | `-3`             |
+| `1 ÷ 3`       | `0.333`          |
+| `−2 ÷ 3`      | `-0.667`         |
+| `√2`          | `1.414`          |
+| `200 × 10%`   | `20`             |
 
 ## 3. Results and the next action
 
@@ -65,16 +65,17 @@ To start a fresh negative expression after a result, activate clear and then `�
 
 Allow incomplete expressions while the user builds them. Validate on `=` and retain the expression when an error occurs.
 
-| Problem | Message |
-| --- | --- |
-| Empty expression | “Enter a calculation.” |
-| Missing value or misplaced operator | “Check the expression.” |
-| Unmatched parentheses | “Check the parentheses.” |
-| Division by zero | “Cannot divide by zero.” |
-| Negative square root | “Square root requires a nonnegative value.” |
-| Unsupported power | “This power cannot be calculated.” |
+| Problem                              | Message                                      |
+| ------------------------------------ | -------------------------------------------- |
+| Empty expression                     | “Enter a calculation.”                       |
+| Missing value or misplaced operator  | “Check the expression.”                      |
+| Unmatched parentheses                | “Check the parentheses.”                     |
+| Division by zero                     | “Cannot divide by zero.”                     |
+| Negative square root                 | “Square root requires a nonnegative value.”  |
+| Unsupported power                    | “This power cannot be calculated.”           |
 | Numeric overflow or nonfinite result | “The result is outside the supported range.” |
-| Failed or timed-out request | “Could not calculate. Try again.” |
+| Rate-limited request                 | “Rate limit exceeded. Try again shortly.”    |
+| Failed or timed-out request          | “Could not calculate. Try again.”            |
 
 Show the error message in the **Result area**, replacing the number while keeping the expression visible for correction. Use smaller, soft-red text; wrap the message without truncation and announce it to screen readers without moving focus. Keep the “Result” label and clear the message on the first actual edit or reset. A successful calculation restores the normal numeric result. The backend validates and evaluates the expression even though input comes from buttons.
 
