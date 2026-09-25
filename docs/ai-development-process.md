@@ -144,3 +144,22 @@ Requirements:
 #### Outcome
 
 I tested the Docker setup and confirmed it worked.
+
+### Prompt 11
+
+Review the whole project and improve code comments and documentation where needed.
+
+Use my personal development skills and documentation guidelines where applicable. Keep application behavior unchanged.
+
+Focus on:
+
+* first-party code comments,
+* README setup and project status,
+* consistency between the implementation and files in `docs/`,
+* removing outdated or misleading documentation.
+
+Do not refactor unrelated code or introduce new features.
+
+#### My review
+
+I reviewed the resulting documentation and comment changes before keeping them.

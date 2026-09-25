@@ -218,6 +218,8 @@ OpenAPI specifies `400` for invalid request envelopes, `413 INVALID_REQUEST` for
 
 ## Project documents
 
+The [AI development process](docs/ai-development-process.md) records the major prompts and my review of the results. I used AI to support planning and implementation, reviewed and edited the output, tested the work, and made the final technical and design decisions. Personal development skills, agent instructions, and internal reference lists are intentionally omitted.
+
 - [Product requirements](docs/prd.md)
 - [Calculator behavior](docs/calculator-behavior.md)
 - [OpenAPI contract](docs/openapi.yaml)
